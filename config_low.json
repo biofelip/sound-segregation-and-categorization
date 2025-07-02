@@ -1,0 +1,22 @@
+{
+    "duration" : 20, 
+    "overlap" : 0.5,
+    "desired_fs" : 64000,
+    "channel" : 0,
+    "color": false, 
+    "log": false,
+    
+    "nfft" : 8096,
+    "win_len" : 8096,
+    "hop_ratio" : 8,
+
+    "cut": true,
+    "cutoutpoint": 3000,
+    
+    "normalization_style": "noisy",
+    
+    "wavs_folder" : "F:\\Linnea\\Copy of All data\\STHH1\\AMAR_1076\\test_linnea2\\test_Set",
+    "dataset_folder" : "F:\\Linnea\\Copy of All data\\STHH1\\AMAR_1076\\test_linnea2\\dataset\\training set low frequency",
+    
+    "annotations_file": "C:\\Users\\247404\\Downloads\\Table low frequency 3kHz.txt"
+}

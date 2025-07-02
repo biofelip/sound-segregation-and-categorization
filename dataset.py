@@ -5,7 +5,7 @@ import pathlib
 import shutil
 import sys
 
-import fairseq
+#import fairseq
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
@@ -34,6 +34,9 @@ from transformers import pipeline
 import models
 import utils as u
 
+import scipy.fft as sp_fft
+import pyfftw.interfaces.scipy_fft as fftw
+sp_fft.set_backend(fftw)
 torchaudio.set_audio_backend(backend='soundfile')
 
 # matplotlib.use('TkAgg')
@@ -47,6 +50,8 @@ class LifeWatchDataset:
         self.duration = config['duration']
         self.overlap = config['overlap']  # overlap of the chunks in %
         self.desired_fs = config['desired_fs']
+        self.cutspectrogram = config['cut']
+        self.cutoutpoint = config['cutoutpoint']
         self.channel = config['channel']
         self.log = config['log']
         self.color = config['color']
@@ -95,7 +100,7 @@ class LifeWatchDataset:
         with open(config_path, 'w') as f:
             json.dump(self.config, f)
 
-    def create_spectrograms(self, overwrite=False, save_image=True, model=None, labels_path=None):
+    def create_spectrograms(self, overwrite=False, save_image=True, model=None, conf=0.1, labels_path=None):
         # First, create all the images
         if self.split_folders:
             folders_list = []
@@ -142,16 +147,18 @@ class LifeWatchDataset:
                         if len(chunk) == self.blocksize:
                             if self.normalization_style == 'noisy':
                                 img, f = self.create_chunk_spectrogram_noisy(chunk)
-                            else:
+                            elif self.normalization_style == 'low_freq':
                                 img, f = self.create_chunk_spectrogram_low_freq(chunk)
+                            # else:
+                            #     img, f = self.create_chunk_spectrogram_low_freq(chunk)
 
                             if model is not None:
                                 results = model(source=np.ascontiguousarray(np.flipud(img)[:, :, ::-1]),
                                                 project=str(self.dataset_folder),
                                                 name='predictions',
-                                                save=False, show=False, save_conf=True, save_txt=False, conf=0.1,
-                                                save_crop=False, agnostic_nms=False, stream=False, verbose=False,
-                                                imgsz=640, exist_ok=True)
+                                                save=False, show=False, save_conf=True, save_txt=False, conf=conf,
+                                                save_crop=True, agnostic_nms=False, stream=False, verbose=False,
+                                                imgsz=1088, exist_ok=True,  iou= 0.45, visualize=False)
                                 for r in results:
                                     label_name = img_name.replace('.png', '.txt')
                                     if self.split_folders:
@@ -172,14 +179,20 @@ class LifeWatchDataset:
                             plt.close()
                     i += self.overlap
 
-    def create_chunk_spectrogram_noisy(self, chunk):
+    def create_chunk_spectrogram_noisy(self, chunk ):
         f, t, sxx = scipy.signal.spectrogram(chunk, fs=self.desired_fs, window=('hamming'),
                                              nperseg=self.win_len,
                                              noverlap=self.win_overlap, nfft=self.nfft,
                                              detrend=False,
                                              return_onesided=True, scaling='density', axis=-1,
                                              mode='magnitude')
-        sxx = sxx[f > 50, :]
+        
+        if self.cutspectrogram:
+            mask = (f > 10) & (f < self.cutoutpoint)
+            sxx = sxx[mask, :]
+        else:
+            #sxx = sxx[f > 0.1, :] & sxx[f < 50, :]
+            sxx =sxx[f > 10, :]
         sxx = 10 * np.log10(sxx)
         per_min = np.percentile(sxx.flatten(), 1)
         per_max = np.percentile(sxx.flatten(), 99)
@@ -202,12 +215,15 @@ class LifeWatchDataset:
                                              detrend=False,
                                              return_onesided=True, scaling='density', axis=-1,
                                              mode='magnitude')
-        sxx = 1 - sxx
+        #sxx = 1 - sxx
+        mask = (f > 10) & (f < 10000)
+        sxx = sxx[mask, :]
+        sxx = 10 * np.log10(sxx + 1e-10)  # Convert to dB scale
         per = np.percentile(sxx.flatten(), 98)
         sxx = (sxx - sxx.min()) / (per - sxx.min())
         sxx[sxx > 1] = 1
         img = np.array(sxx * 255, dtype=np.uint8)
-        return img
+        return img, f
 
     def convert_raven_annotations_to_yolo(self, labels_to_exclude=None, values_to_replace=0):
         """
@@ -219,10 +235,17 @@ class LifeWatchDataset:
         :return:
         """
         for _, selections in self.load_relevant_selection_table(labels_to_exclude=labels_to_exclude):
-            selections['height'] = (selections['High Freq (Hz)'] - selections['Low Freq (Hz)']) / (self.desired_fs / 2)
+            if self.cutspectrogram:
+                cutout = self.cutoutpoint
+            else:
+                cutout = self.desired_fs /2
+
+            #selections['height'] = (selections['High Freq (Hz)'] - selections['Low Freq (Hz)']) / (self.desired_fs / 2)
+            selections['height'] = (selections['High Freq (Hz)'] - selections['Low Freq (Hz)']) / cutout 
 
             # The y is from the TOP!
-            selections['y'] = 1 - (selections['High Freq (Hz)'] / (self.desired_fs / 2))
+            # selections['y'] = 1 - (selections['High Freq (Hz)'] / (self.desired_fs / 2))
+            selections['y'] = 1 - (selections['High Freq (Hz)'] / cutout)
 
             # compute the width in pixels
             selections['width'] = ((selections['End Time (s)'] - selections['Begin Time (s)']) / self.duration)
@@ -288,14 +311,20 @@ class LifeWatchDataset:
 
     def convert_raven_annotations_to_df(self, labels_to_exclude=None, values_to_replace=0):
         total_selections = pd.DataFrame()
+        if self.cutspectrogram:
+            cutout = self.cutoutpoint
+        else:
+            cutout = self.desired_fs / 2
         for _, selections in self.load_relevant_selection_table(labels_to_exclude=labels_to_exclude):
-            selections['height'] = (selections['High Freq (Hz)'] - selections['Low Freq (Hz)']) / (self.desired_fs / 2)
+            # selections['height'] = (selections['High Freq (Hz)'] - selections['Low Freq (Hz)']) / (self.desired_fs / 2)
+            selections['height'] = (selections['High Freq (Hz)'] - selections['Low Freq (Hz)']) / cutout
 
             # compute the width in pixels
             selections['width'] = ((selections['End Time (s)'] - selections['Begin Time (s)']) / self.duration)
 
             # The y is from the TOP!
-            selections['y'] = 1 - (selections['High Freq (Hz)'] / (self.desired_fs / 2)) + selections['height'] / 2
+            # selections['y'] = 1 - (selections['High Freq (Hz)'] / (self.desired_fs / 2)) + selections['height'] / 2
+            selections['y'] = 1 - (selections['High Freq (Hz)'] / (cutout)) + selections['height'] / 2
 
             # Remove selections smaller than 2 pixels and longer than half the duration
             selections = selections.loc[(selections['End Time (s)'] - selections['Begin Time (s)']) < self.MAX_DURATION]
@@ -316,6 +345,11 @@ class LifeWatchDataset:
         return total_selections
 
     def all_predictions_to_dataframe(self, labels_folder, overwrite=True):
+        if self.cutspectrogram:
+            cutout = self.cutoutpoint
+        else:
+            cutout = self.desired_fs / 2
+
         detected_foregrounds = []
         if self.split_folders:
             wav_folder = self.wavs_folder.joinpath(labels_folder.name)
@@ -340,11 +374,15 @@ class LifeWatchDataset:
         detected_foregrounds = np.stack(detected_foregrounds)
         detected_foregrounds = pd.DataFrame(detected_foregrounds, columns=detections.columns)
         detected_foregrounds['duration'] = detected_foregrounds.width * self.duration
-        detected_foregrounds['min_freq'] = (1 - (detected_foregrounds.y + detected_foregrounds.height / 2)) * self.desired_fs / 2
-        detected_foregrounds['max_freq'] = (1 - (detected_foregrounds.y - detected_foregrounds.height / 2)) * self.desired_fs / 2
+        detected_foregrounds['min_freq'] = (1 - (detected_foregrounds.y + detected_foregrounds.height / 2)) * cutout
+        detected_foregrounds['max_freq'] = (1 - (detected_foregrounds.y - detected_foregrounds.height / 2)) * cutout
         return detected_foregrounds
 
     def convert_detections_to_raven(self, predictions_folder, add_station_name=False, min_conf=None):
+        if self.cutspectrogram:
+            cutout = self.cutoutpoint
+        else:
+            cutout = self.desired_fs / 2
         # Convert to DataFrame
         labels_folder = predictions_folder.joinpath('labels')
         if self.split_folders:
@@ -373,9 +411,9 @@ class LifeWatchDataset:
 
                 detected_foregrounds.loc[detected_foregrounds['Low Freq (Hz)'] < 0, 'Low Freq (Hz)'] = 0
                 detected_foregrounds = detected_foregrounds.loc[
-                    detected_foregrounds['Low Freq (Hz)'] <= self.desired_fs / 2]
-                detected_foregrounds.loc[detected_foregrounds['High Freq (Hz)'] > self.desired_fs / 2,
-                                         'High Freq (Hz)'] = self.desired_fs / 2
+                    detected_foregrounds['Low Freq (Hz)'] <= cutout]
+                detected_foregrounds.loc[detected_foregrounds['High Freq (Hz)'] > cutout,
+                                         'High Freq (Hz)'] = cutout
 
                 detected_foregrounds['View'] = 'Spectrogram 1'
                 detected_foregrounds['Channel'] = 1
@@ -407,7 +445,7 @@ class LifeWatchDataset:
                     detected_foregrounds.loc[mask, 'cummulative_sec'] = cummulative_seconds
                     detected_foregrounds.loc[mask, 'fs'] = waveform_info.sample_rate
                     cummulative_seconds += waveform_info.num_frames / waveform_info.sample_rate
-
+                detected_foregrounds = detected_foregrounds.loc[detected_foregrounds['fs'].notna(),]
                 detected_foregrounds['Beg File Samp (samples)'] = (detected_foregrounds['Begin Time (s)']
                                                                  * detected_foregrounds['fs']).astype(int)
                 detected_foregrounds['End File Samp (samples)'] = (detected_foregrounds['End Time (s)']

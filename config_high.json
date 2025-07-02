@@ -1,0 +1,21 @@
+{
+    "duration" : 20, 
+    "overlap" : 0.5,
+    "desired_fs" : 64000,
+    "channel" : 0,
+    "color": false, 
+    "log": false,
+    
+    "nfft" : 1024,
+    "win_len" : 1024,
+    "hop_ratio" : 8,
+
+    "cut": false,
+    "cutoutpoint": 3000,
+    
+    "normalization_style": "noisy",
+    "wavs_folder" : "F:\\Linnea\\Copy of All data\\STHH1\\AMAR_1076\\test_linnea2",
+    "dataset_folder" : "F:\\Linnea\\Copy of All data\\STHH1\\AMAR_1076\\test_linnea2\\dataset\\training set high frequency",
+    
+    "annotations_file": "C:\\Users\\247404\\Downloads\\Table high frequency 3kHz.txt"
+}

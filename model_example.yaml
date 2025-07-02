@@ -1,6 +1,6 @@
-path:  ''
-train: ''
-val: ''
+path:  'F:\Linnea\Copy of All data\STHH1\AMAR_1076\test_linnea2\dataset'
+train: 'F:\Linnea\Copy of All data\STHH1\AMAR_1076\test_linnea2\dataset\train'
+val: 'F:\Linnea\Copy of All data\STHH1\AMAR_1076\test_linnea2\dataset\valid'
 test: ''
 
 #Classes

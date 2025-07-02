@@ -1,0 +1,6 @@
+path: F:\Linnea\Copy of All data\STHH1\AMAR_1076\test_linnea2\dataset\training set high frequency
+train: images\train
+val: images\val
+
+nc: 1
+names: [ 'foreground']

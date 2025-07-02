@@ -5,10 +5,11 @@ from ultralytics.data import utils
 import yaml
 import torch
 
-import new_model
+#import new_model
 
 # YAML_FILE = '/mnt/fscompute_shared/roi/configs/custom_rtsys_rgb.yaml'
-YAML_FILE = '/mnt/fscompute_shared/roi/configs/custom_rtsys_all.yaml'
+# YAML_FILE = '/mnt/fscompute_shared/roi/configs/custom_rtsys_all.yaml'
+YAML_FILE = 'yolo.yaml'
 # BEST_PARAMS = '/mnt/fscompute_shared/roi/runs/tune/best_config.yaml'
 
 
@@ -42,8 +43,8 @@ def run():
 
     # Load a model
     # model = YOLO('/mnt/fscompute_shared/roi/models/model_base/model_0.pt')
-    model = new_model.YOLO('yolov8n.pt')
-    # model = YOLO('yolov8s.yaml')
+    #model = YOLO('yolov8n.pt')
+    model = YOLO(r"F:\Linnea\Copy of All data\STHH1\AMAR_1076\test_linnea2\dataset\training set high frequency\runs\detect\bpns\train_manual_Felipe\model_hf\weights\best.pt")
 
     # Freeze the layers
     # model.add_callback("on_train_start", freeze_layer)
@@ -54,16 +55,22 @@ def run():
     best_params = {
         'mixup': 0.0,
         'copy_paste': 0.0,
-        'iou': 0.3,
-        'imgsz': 640,
+        'iou': 0.4,
+        'imgsz': 2176,
         'mosaic': 0.0,
         'degrees': 0.0,
         'shear': 0.0,
         'perspective': 0.0,
-        'scale': 0.0
+        'scale': 0.7,
+        'single_cls': True,
+        'rect': True,
+        'verbose': True,
+        'patience':50,
+        'lr0': 0.000000000000000001,
+        'save_period':50
     }
-    model.train(epochs=200, batch=32, data=YAML_FILE,
-                project=config['path'] + '/runs/detect/bpns', resume=False, **best_params)
+    model.train(epochs=100, batch=4, data=YAML_FILE,
+                project=config['path'] + '/runs/detect/bpns/train_manual_Felipe', resume=False, **best_params)
 
     # single_cls
     # evaluate model performance on the validation and the tests
@@ -72,5 +79,5 @@ def run():
     experiment.end()
 
 
-if __name__ == '__main__':
-    run()
+#if __name__ == '__main__':
+run()

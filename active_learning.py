@@ -26,7 +26,8 @@ def compute_overlap_map_detections(x, y, detections):
     return iou_grid
 
 
-unlabeled_config_path = input('Where is the unlabeled pool json config?')
+# unlabeled_config_path = input('Where is the unlabeled pool json config?')
+unlabeled_config_path = r'config_al.json'
 f = open(unlabeled_config_path)
 unlabeled_config = json.load(f)
 unlabeled_ds = dataset.LifeWatchDataset(unlabeled_config)
@@ -34,14 +35,18 @@ unlabeled_ds = dataset.LifeWatchDataset(unlabeled_config)
 labels_to_exclude = ['boat_sound', 'boat_noise', 'water_movement', 'boat_operation',
                      'electronic_noise', 'interference', 'voice', 'out_of_water', 'deployment']
 
-active_learning_step = int(input('what is the active learning step?: '))
-already_annotated = input('Did you already annotate the files? y/n: ') == 'y'
-
+# active_learning_step = int(input('what is the active learning step?: '))
+active_learning_step = 0
+# already_annotated = input('Did you already annotate the files? y/n: ') == 'y'
+already_annotated = False
 # Load a model
-model_path = input('Where is the model? :')
+# model_path = input('Where is the model? :')
+model_path = r"F:\Linnea\Copy of All data\STHH1\AMAR_1076\test_linnea2\dataset\training set high frequency\runs\detect\bpns\train_manual_Felipe\model_hf\weights\best.pt"
+
 model = YOLO(model_path)  # pretrained YOLOv8n model
 
-previous_training_set_config_path = input('Where is the configuration of the previous training set? :')
+# previous_training_set_config_path = input('Where is the configuration of the previous training set? :')
+previous_training_set_config_path = r'config_high.json'
 f = open(previous_training_set_config_path)
 previous_training_set_config = json.load(f)
 training_ds = dataset.LifeWatchDataset(previous_training_set_config)
@@ -59,7 +64,7 @@ if not already_annotated:
     overwrite = False
 
     # Predictions need to be done in the ENTIRE UNLABELED FOLDER
-    if overwrite or (not unlabeled_ds.dataset_folder.joinpath('predictions_%s' % active_learning_step).exists()):
+    if overwrite  or (not unlabeled_ds.dataset_folder.joinpath('predictions_%s' % active_learning_step).exists()):
         print('predicting...')
         results = model(source=unlabeled_ds.images_folder, project=str(unlabeled_ds.dataset_folder),
                         name='predictions_%s' % active_learning_step, stream=True, save=False,
