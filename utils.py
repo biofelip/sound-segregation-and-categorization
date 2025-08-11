@@ -191,10 +191,11 @@ class DatasetWaveform(DataLoader):
         else:
             waveform = waveform
 
-        max_samples = self.max_duration * self.desired_fs
-        waveform = waveform[self.channel, :max_samples]
+        max_samples = int(self.max_duration * self.desired_fs)
+        waveform = waveform[self.channel:self.channel+1, :max_samples]
         if waveform.shape[0] < max_samples:
-            waveform = F_general.pad(waveform, (0, max_samples - waveform.shape[0]))
+            pad_amount = max_samples - waveform.shape[-1]
+            waveform = F_general.pad(waveform, (0, pad_amount))
 
         if (row['min_freq'] > 10) and (row['max_freq'] < (self.desired_fs / 2)):
             sos = scipy.signal.iirfilter(4, [row['min_freq'],
@@ -219,7 +220,7 @@ class DatasetWaveform(DataLoader):
 
         else:
             waveform = waveform
-
+        print(f"WAVEFORM SHAPE: {waveform.shape}")
         return torch.Tensor(waveform), torch.tensor(row.name)
 
 

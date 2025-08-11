@@ -8,7 +8,7 @@ import cluster
 
 if __name__ == '__main__':
     # config_path = input('Where is the config json file of the dataset?: ')
-    config_path = 'config.json'
+    config_path = 'config_clap_problem.json'
 
     f = open(config_path)
     config = json.load(f)
@@ -19,8 +19,8 @@ if __name__ == '__main__':
     if not predictions_folder.joinpath('labels').exists():
         #model_path = input('Where is the model to predict?')
         #high freqnecy
-        #model_path = r"F:\Linnea\Copy of All data\STHH1\AMAR_1076\test_linnea2\dataset\training set high frequency\runs\detect\bpns\train_manual_Felipe\model_hf\weights\best.pt"
-        model_path = r"F:\Linnea\Copy of All data\STHH1\AMAR_1076\test_linnea2\dataset\training set low frequency\runs\detect\bpns\train_manual_Felipe\train7\weights\best.pt"
+        model_path = r"F:\Linnea\Copy of All data\STHH1\AMAR_1076\test_linnea2\dataset\training set high frequency\runs\detect\bpns\train_manual_Felipe\model_hf\weights\best.pt"
+        # model_path = r"F:\Linnea\Copy of All data\STHH1\AMAR_1076\test_linnea2\dataset\training set low frequency\runs\detect\bpns\train_manual_Felipe\train7\weights\best.pt"
 
         model = YOLO(model_path)
         os.mkdir(predictions_folder)
@@ -31,8 +31,13 @@ if __name__ == '__main__':
     ds.convert_detections_to_raven(predictions_folder=predictions_folder)
     # the clusterization fails beacause the generated serialized pickle is empty. 
     total_selection_table = cluster.generate_clusters(ds)
+    total_selection_table.to_csv(ds.dataset_folder.joinpath('total_selection_table.csv'))
+    total_selection_table.to_csv(ds.dataset_folder.joinpath('total_selection_table.txt'), sep='\t')
+    
 
-    ds.plot_clusters_polar_day(total_selection_table, selected_clusters=[0, 1, 2, 4, 5, 6, 14, 17, 19])
+
+
+    ds.plot_clusters_polar_day(total_selection_table)
     ds.plot_clusters_polar_day(total_selection_table, selected_clusters=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
 
 # import pandas as pd

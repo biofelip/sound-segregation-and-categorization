@@ -690,11 +690,12 @@ class LifeWatchDataset:
         if not features_path.exists():
             device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
             model = ClapModel.from_pretrained("davidrrobinson/BioLingual").to(device)
-            processor = ClapProcessor.from_pretrained("davidrrobinson/BioLingual", sampling_rate=self.desired_fs)
+            processor = ClapProcessor.from_pretrained("davidrrobinson/BioLingual", sampling_rate=48000) # before self.desired_fs
 
             total_df = pd.DataFrame()
             folder_n = 0
             for _, selection_table in self.load_relevant_selection_table(labels_to_exclude=labels_to_exclude):
+                print(selection_table)
                 if not self.dataset_folder.joinpath(output_name + '_%s.pkl' % folder_n).exists():
                     if 'wav' not in selection_table.columns:
                         if isinstance(self.wavs_folder, pathlib.PosixPath):
@@ -723,9 +724,15 @@ class LifeWatchDataset:
                         shuffle=False)
                     features_list, idxs = [], []
                     for x, i in tqdm(dataloader):
-                        x = [s.cpu().numpy() for s in x]
-                        inputs = processor(audios=x, return_tensors="pt", sampling_rate=self.desired_fs).to(
-                            device)
+                        x_resampled = []
+                        for audio_tensor in x:
+                            audio_tensor = audio_tensor.squeeze()
+                            audio_resampled = F.resample(audio_tensor, orig_freq=64000, new_freq=48000)
+                            x_resampled.append(audio_resampled.cpu().numpy().astype(np.float32))
+                        # x = [s.cpu().numpy() for s in x]
+                        # inputs = processor(audios=x, return_tensors="pt", sampling_rate=self.desired_fs).to(
+                        #     device)
+                        inputs = processor(audios=x_resampled, return_tensors="pt", sampling_rate=48000).to(device)
                         audio_embed = model.get_audio_features(**inputs)
                         features_list.extend(audio_embed.cpu().detach().numpy())
                         idxs.extend(i.cpu().detach().numpy())
@@ -1100,8 +1107,8 @@ class LifeWatchDataset:
 
     def plot_clusters_polar_day(self, foregrounds_with_clusters):
         df = foregrounds_with_clusters
-        df['datetime'] = df['Begin File'].str[-23:-4]
-        df['datetime'] = pd.to_datetime(df['datetime'], format='%Y-%m-%d_%H-%M-%S')
+        df['datetime'] = df['Begin File'].str[-20:-4]
+        df['datetime'] = pd.to_datetime(df['datetime'],  format="%Y%m%dT%H%M%SZ")
         df['datetime'] = df['datetime'] + pd.to_timedelta(df['Beg File Samp (samples)'] / self.desired_fs,
                                                           unit='seconds')
         df['minute'] = df['datetime'].dt.hour * 60 + df['datetime'].dt.minute
