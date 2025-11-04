@@ -27,6 +27,8 @@ import copy
 import suntime
 import pytz
 import noisereduce as nr
+import librosa
+import io
 
 from transformers import ClapModel, ClapProcessor
 from transformers import pipeline
@@ -786,6 +788,128 @@ class LifeWatchDataset:
             total_df = pd.read_pickle(self.dataset_folder.joinpath(output_name + '.pkl'))
 
         return total_df
+    
+    
+    def encode_clap_with_images(self, labels_to_exclude=None, max_duration=1):
+        def waveform_to_spectrogram_image(waveform, sr=64000):
+            S = librosa.feature.melspectrogram(y=waveform, sr=sr, n_mels=128)
+            S_dB = librosa.power_to_db(S, ref=np.max)
+            fig, ax = plt.subplots(figsize=(2.24,2.24), dpi=100)  # 224x224
+            librosa.display.specshow(S_dB, sr=sr, x_axis=None, y_axis=None, ax=ax)
+            ax.axis("off")
+            buf = io.BytesIO()
+            plt.savefig(buf, format="png", bbox_inches="tight", pad_inches=0)
+            plt.close(fig)
+            buf.seek(0)
+            return Image.open(buf).convert("RGB")
+
+        output_name = 'CLAP_image_features_space_filtered_%s' % max_duration
+        features_path = self.dataset_folder.joinpath(output_name + '.pkl')
+
+        if not features_path.exists():
+            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+            # Audio model
+            model = ClapModel.from_pretrained("davidrrobinson/BioLingual").to(device)
+            processor = ClapProcessor.from_pretrained("davidrrobinson/BioLingual", sampling_rate=64000, truncation=True)
+            
+            # Image model
+            from torchvision import models, transforms
+            img_model = models.resnet18(pretrained=True)
+            img_model.fc = torch.nn.Identity()  # remove final classification layer
+            img_model = img_model.to(device)
+            img_model.eval()
+            
+            img_transform = transforms.Compose([
+                transforms.Resize((224,224)),
+                transforms.ToTensor(),
+                transforms.Normalize(mean=[0.485,0.456,0.406], std=[0.229,0.224,0.225])
+            ])
+
+            total_df = pd.DataFrame()
+            folder_n = 0
+
+            for _, selection_table in self.load_relevant_selection_table(labels_to_exclude=labels_to_exclude):
+                print(selection_table)
+                if not self.dataset_folder.joinpath(output_name + '_%s.pkl' % folder_n).exists():
+                    if 'wav' not in selection_table.columns:
+                        joining_str = '/' if isinstance(self.wavs_folder, pathlib.PosixPath) else '\\'
+                        selection_table = selection_table.assign(wav=str(self.wavs_folder) + joining_str + selection_table['Begin File'])
+
+                    selection_table['height'] = selection_table['High Freq (Hz)'] - selection_table['Low Freq (Hz)']
+                    selection_table['width'] = selection_table['End Time (s)'] - selection_table['Begin Time (s)']
+                    if 'min_freq' in selection_table.columns:
+                        selection_table = selection_table.drop(columns=['min_freq', 'max_freq'])
+                    selection_table = selection_table.rename(columns={'High Freq (Hz)': 'max_freq',
+                                                                    'Low Freq (Hz)': 'min_freq'})
+
+                    if 'begin_sample' not in selection_table.columns:
+                        selection_table = selection_table.rename(columns={'Begin File': 'filename',
+                                                                        'Beg File Samp (samples)': 'begin_sample',
+                                                                        'End File Samp (samples)': 'end_sample'})
+
+                    dataloader = torch.utils.data.DataLoader(
+                        dataset=u.DatasetWaveform(df=selection_table, wavs_folder=self.wavs_folder, desired_fs=self.desired_fs,
+                                                max_duration=max_duration),
+                        batch_size=16,
+                        shuffle=False)
+
+                    audio_features_list, image_features_list, idxs = [], [], []
+
+                    for batch, i in tqdm(dataloader):
+                        # --- Audio embeddings ---
+                        waveforms = [w.cpu().numpy().squeeze() for w in batch]
+                        inputs = processor(audios=waveforms, sampling_rate=64000, return_tensors="pt",
+                                        truncation="rand_trunc", max_length=256)
+                        inputs = {k: v.to(model.device) for k, v in inputs.items()}
+                        audio_embed = model.get_audio_features(**inputs)
+                        audio_features_list.extend(audio_embed.cpu().detach().numpy())
+
+                        # --- Image embeddings ---
+                        for w, idx in zip(waveforms, i.cpu().numpy()):
+                            spectrogram_image = waveform_to_spectrogram_image(w, sr=64000)
+                            img_tensor = img_transform(spectrogram_image).unsqueeze(0).to(device)
+                            with torch.no_grad():
+                                img_embed = img_model(img_tensor)
+                            image_features_list.append(img_embed.cpu().numpy().squeeze())
+
+                        # --- indices ---
+                        idxs.extend(i.cpu().detach().numpy())
+
+                    # Combine audio + image features
+                    audio_features = np.stack(audio_features_list)
+                    image_features = np.stack(image_features_list)
+                    combined_features = np.concatenate([audio_features, image_features], axis=1)
+
+                    # Add normalized vertical position
+                    max_time = selection_table['End Time (s)'].max()
+                    vertical_pos = (selection_table['Begin Time (s)'].values / max_time)[:, None]
+                    combined_features = np.concatenate([combined_features, vertical_pos], axis=1)
+
+                    features_space = torch.Tensor(combined_features.astype(float))
+                    torch.save(features_space, features_path)
+
+                    # Create DataFrame with metadata
+                    features_df = pd.DataFrame(features_space.numpy(), index=idxs)
+                    columns = ['min_freq', 'max_freq', 'height', 'width', 'SNR NIST Quick (dB)']
+                    if 'SNR NIST Quick (dB)' not in selection_table.columns:
+                        columns = ['min_freq', 'max_freq', 'height', 'width', 'Tags']
+                    df = pd.merge(features_df, selection_table[columns], left_index=True, right_index=True)
+                    df = df.rename(columns={'height': 'bandwidth', 'width': 'duration', 'SNR NIST Quick (dB)': 'snr',
+                                            'Tags': 'label'})
+                    df.to_pickle(self.dataset_folder.joinpath(output_name + '_%s.pkl' % folder_n))
+
+                else:
+                    df = pd.read_pickle(self.dataset_folder.joinpath(output_name + '_%s.pkl' % folder_n))
+
+                total_df = pd.concat([total_df, df])
+                folder_n += 1
+
+            total_df.to_pickle(self.dataset_folder.joinpath(output_name + '.pkl'))
+        else:
+            total_df = pd.read_pickle(self.dataset_folder.joinpath(output_name + '.pkl'))
+
+        return total_df
+
 
     def zero_shot_learning(self, labels_to_exclude=None):
         output_name = 'zero_shot_space'

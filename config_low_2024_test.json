@@ -1,0 +1,21 @@
+{
+    "duration" : 20, 
+    "overlap" : 0.5,
+    "desired_fs" : 64000,
+    "channel" : 0,
+    "color": false, 
+    "log": false,
+    
+    "nfft" : 8192,
+    "win_len" : 8192,
+    "hop_ratio" : 8,
+
+    "cut": true,
+    "cutoutpoint": 3000,
+    
+    "normalization_style": "noisy",
+    "wavs_folder" : "E:\\HABITATWal\\AMAR\\above_3_khz\\wavs_test",
+    "dataset_folder" : "F:\\Linnea\\2024_low\\dataset\\test",
+    
+    "annotations_file": ""
+}

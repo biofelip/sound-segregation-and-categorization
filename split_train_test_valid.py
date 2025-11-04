@@ -18,10 +18,10 @@ def split_train_valid(output, valid, add_backgrounds):
     valid_files = all_files_series.sample(int(len(all_files_list) * valid), random_state=SEED)
 
     print('moving valid...')
-    labels_valid_folder = labels_folder.joinpath( 'val8096')
-    labels_train_folder = labels_folder.joinpath('train8096')
-    img_valid_folder = images_folder.joinpath('val8096')
-    img_train_folder = images_folder.joinpath( 'train8096')
+    labels_valid_folder = labels_folder.joinpath( 'val')
+    labels_train_folder = labels_folder.joinpath('train')
+    img_valid_folder = images_folder.joinpath('val')
+    img_train_folder = images_folder.joinpath( 'train')
 
     for valid_file in tqdm(valid_files, total=len(valid_files)):
         try:

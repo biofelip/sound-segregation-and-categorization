@@ -6,16 +6,16 @@
     "color": false, 
     "log": false,
     
-    "nfft" : 1024,
-    "win_len" : 1024,
+    "nfft" : 8192,
+    "win_len" : 8192,
     "hop_ratio" : 8,
 
-    "cut": false,
+    "cut": true,
     "cutoutpoint": 3000,
     
     "normalization_style": "noisy",
     "wavs_folder" : "E:\\HABITATWal\\AMAR\\above_3_khz\\wavs_test",
-    "dataset_folder" : "F:\\Linnea\\2024_high\\dataset\\test",
+    "dataset_folder" : "F:\\Linnea\\2024_low\\dataset\\test",
     
     "annotations_file": ""
 }

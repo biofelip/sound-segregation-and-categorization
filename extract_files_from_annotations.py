@@ -20,16 +20,16 @@ def main():
     destination_folder = args.destination_folder
     root_folder  = args.root_folder
 
-    # annotation_file = r"E:\HABITATWal\AMAR\New_Training_dataset_above 3 kHz.txt"
-    # destination_folder = r"above_3_khz\wavs"
-    # root_folder  = r"E:\HABITATWal\AMAR"
-    # read the annotation file
+    annotation_file = r"E:\HABITATWal\AMAR\Test_data_100.txt"
+    destination_folder = r"F:\Linnea\test_set100"
+    root_folder  = r"E:\HABITATWal\AMAR"
+    #read the annotation file
     df = pd.read_table(os.path.join(root_folder, annotation_file))
 
 
     # extrat the non repeated file names
-    file_names = df['Begin File'].unique()
-
+    file_names = df['file'].unique()
+    # file_names = df['file'].unique()
 
     # extract all the  complete wav files in the root
     wav_files = glob.glob(os.path.join(root_folder, "**", "**/*.wav"))
@@ -37,6 +37,7 @@ def main():
     os.makedirs(os.path.join(root_folder,destination_folder), exist_ok=True)
 
     train_set =[f for f in wav_files if os.path.basename(f) in file_names]
+    sum([os.path.getsize(f) for f in train_set])/1e9
 
     # copy the files to the destination folder  
     for file_name in train_set:

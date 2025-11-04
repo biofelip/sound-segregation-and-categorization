@@ -1,0 +1,21 @@
+{
+    "duration" : 20, 
+    "overlap" : 0.5,
+    "desired_fs" : 64000,
+    "channel" : 0,
+    "color": false, 
+    "log": false,
+    
+    "nfft" : 1024,
+    "win_len" : 1024,
+    "hop_ratio" : 8,
+
+    "cut": false,
+    "cutoutpoint": 3000,
+    
+    "normalization_style": "noisy",
+    "wavs_folder" : "C:\\Users\\247404\\Documents\\2024\\Linnea\\Soundscape\\above_3_khz\\wavs_test_100\\animal_files",
+    "dataset_folder" : "F:\\Linnea\\2024_high\\dataset\\test_100\\animal_files",
+    
+    "annotations_file": ""
+}

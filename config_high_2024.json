@@ -17,5 +17,5 @@
     "wavs_folder" : "E:\\HABITATWal\\AMAR\\above_3_khz\\wavs",
     "dataset_folder" : "F:\\Linnea\\2024_high\\dataset",
     
-    "annotations_file": "E:\\HABITATWal\\AMAR\\New_Training_dataset_above 3 kHz.txt"
-}
+    "annotations_file": "E:\\HABITATWal\\AMAR\\Training_dataset_High frequency.txt"
+}   

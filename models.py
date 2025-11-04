@@ -5,7 +5,8 @@ from filterbank import STFT, MelFilter, Log1p, MedFilt
 import torch
 from transformers import AutoProcessor, ClapModel, ClapAudioModelWithProjection, ClapProcessor
 
-torch.hub.set_dir('/data/cleap/torch/')
+# torch.hub.set_dir('/data/cleap/torch/')
+torch.hub.set_dir('/home/biofelip/.cache/torch')
 
 vgg16 = torchmodels.vgg16(weights=torchmodels.VGG16_Weights.DEFAULT)
 vgg16 = vgg16.features[:13]

@@ -15,7 +15,7 @@
     
     "normalization_style": "noisy",
     "wavs_folder" : "E:\\HABITATWal\\AMAR\\above_3_khz\\wavs",
-    "dataset_folder" : "F:\\Linnea\\2024_high\\dataset\\clustering_test",
+    "dataset_folder" : "F:\\Linnea\\2024_high\\dataset\\clustering_test\\training set",
     
     "annotations_file": "E:\\HABITATWal\\AMAR\\New_Training_dataset_above 3 kHz.txt"
 }
