@@ -6,8 +6,8 @@
     "color": false, 
     "log": false,
     
-    "nfft" : 8096,
-    "win_len" : 8096,
+    "nfft" : 8192,
+    "win_len" : 8192,
     "hop_ratio" : 8,
 
     "cut": true,

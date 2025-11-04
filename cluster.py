@@ -13,7 +13,6 @@ import umap
 from sklearn import metrics
 from sklearn.preprocessing import RobustScaler
 import soundfile as sf
-
 import dataset
 
 from scipy.spatial import ConvexHull
@@ -143,11 +142,15 @@ def plot_clusters(embedding, clusters, save_path):
     plt.show()
 
 
-def generate_clusters(ds):
+def generate_clusters(ds, u_map_ncomp, u_map_nneigh, u_map_min_dist, 
+                      cluster_min_cluster_size, cluster_epsilon,
+                     features,save_plot=False, save_pkl=False,
+                    plot_embedding=False, plot_clusters=False):
     RANDOM_SEED = 20210105
-    labels_to_exclude = ['boat_sound', 'boat_noise', 'water_movement', 'boat_operations',
-                         'electronic_noise', 'interference', 'voice', 'out_of_water', 'deployment']
-    features = ds.encode_clap(labels_to_exclude=labels_to_exclude, max_duration=1)
+    # labels_to_exclude = ['boat_sound', 'boat_noise', 'water_movement', 'boat_operations',
+    #                      'electronic_noise', 'interference', 'voice', 'out_of_water', 'deployment']
+    # if features.shape[0] == 0:
+    #     features = ds.encode_clap(labels_to_exclude=labels_to_exclude, max_duration=3)
     original_features = features.copy()
 
     # Cluster the features
@@ -155,29 +158,41 @@ def generate_clusters(ds):
         features = features.drop(columns=['label'])
     #features = features.loc[features.duration > 0.3]
 
-    features['max_freq'] = features['max_freq'] / 12000
-    features['min_freq'] = features['min_freq'] / 12000
-    features['bandwidth'] = features['bandwidth'] / 12000
-    features['duration'] = features['duration'] / 10
+    # features['max_freq'] = features['max_freq'] / 12000
+    # features['min_freq'] = features['min_freq'] / 12000
+    # features['bandwidth'] = features['bandwidth'] / 12000
+    # features['duration'] = features['duration'] / 10
 
-    features = features.drop(columns=['max_freq', 'min_freq', 'bandwidth', 'duration'])
+    # features = features.drop(columns=['max_freq', 'min_freq', 'bandwidth', 'duration'])
 
     # Dimension reduction
-    umap_box = umap.UMAP(n_components=2, n_neighbors=20, min_dist=0.1, random_state=RANDOM_SEED)
+
+    umap_box = umap.UMAP(n_components=u_map_ncomp, n_neighbors=u_map_nneigh, 
+                         min_dist=u_map_min_dist, metric='cosine', random_state=RANDOM_SEED,
+                         low_memory=True, n_jobs=-1)
+    # umap_box = cuml.manifold.UMAP(n_components=u_map_ncomp, n_neighbors=u_map_nneigh, 
+    #                      min_dist=u_map_min_dist, metric='euclidean',random_state=RANDOM_SEED)
     umap_box.fit(features)
     embedding = umap_box.transform(features)
 
     # Plot the embedding
-    ax = sns.scatterplot(x=embedding[:, 0], y=embedding[:, 1],
-                         s=10, alpha=0.9,
-                         legend=False)
-    plt.xlabel('UMAP x')
-    plt.ylabel('UMAP y')
-    plt.savefig('umap2d.png')
-    plt.show()
+    if plot_embedding:
+        ax = sns.scatterplot(x=embedding[:, 0], y=embedding[:, 1],
+                            s=10, alpha=0.9,
+                            legend=False)
+        plt.xlabel('UMAP x')
+        plt.ylabel('UMAP y')
+        plt.savefig('umap2d.png')
+        plt.show()
 
     # Clustering
-    hdbscan_model = hdbscan.HDBSCAN(cluster_selection_epsilon=0.2, min_cluster_size=5, min_samples=3)
+    #np.random.seed(RANDOM_SEED)
+    hdbscan_model = hdbscan.HDBSCAN(cluster_selection_epsilon=cluster_epsilon,
+                                    min_cluster_size=cluster_min_cluster_size,
+                                    algorithm='boruvka_kdtree', core_dist_n_jobs = -1)
+    # hdbscan_model = cuml.cluster.hdbscan.HDBSCAN(cluster_selection_epsilon=cluster_epsilon,
+    #                                 min_cluster_size=cluster_min_cluster_size, metric='euclidean',
+    #                                 algorithm='boruvka_kdtree')
     clusterer = hdbscan_model.fit(embedding)
     clusters = clusterer.labels_
 
@@ -205,50 +220,59 @@ def generate_clusters(ds):
     # Plot the clusters with convex hull
     noise_mask = clusters == -1
     clusters_array = np.arange(len(np.unique(clusters)) - 1)
+    variances=embedding.var(axis=0)
+    top_2=variances.argsort()[-2:][::-1]
+    embedding=embedding[:,top_2]
+    if plot_clusters:
+        ax = sns.scatterplot(x=embedding[noise_mask, 0], y=embedding[noise_mask, 1],
+                            s=20, alpha=0.9,
+                            legend=False, color='gray')
+        g = sns.scatterplot(x=embedding[~noise_mask, 0], y=embedding[~noise_mask, 1], s=45,
+                            hue=clusters[~noise_mask].astype(str), hue_order=clusters_array.astype(str),
+                            legend=True, ax=ax)
 
-    ax = sns.scatterplot(x=embedding[noise_mask, 0], y=embedding[noise_mask, 1],
-                        s=20, alpha=0.9,
-                        legend=False, color='gray')
-    g = sns.scatterplot(x=embedding[~noise_mask, 0], y=embedding[~noise_mask, 1], s=45,
-                        hue=clusters[~noise_mask].astype(str), hue_order=clusters_array.astype(str),
-                        legend=True, ax=ax)
+        # Add convex hulls around clusters
+        for c in clusters_array:
+            embeddings_c = embedding[clusters == c]
+            
+            # Only draw convex hull if we have at least 3 points
+            if len(embeddings_c) >= 3:
+                # variances=embeddings_c.var(axis=0)
+                # top_2=variances.argsort()[-2:][::-1]
+                # embeddings_c=embeddings_c[:,:2]
+                try:
+                    hull = ConvexHull(embeddings_c)
+                    # Get the vertices of the convex hull
+                    hull_points = embeddings_c[hull.vertices]
+                    
+                    # Create a polygon patch
+                    polygon = patches.Polygon(hull_points, linewidth=2, edgecolor='black', 
+                                            facecolor='none', alpha=0.7, linestyle='--')
+                    ax.add_patch(polygon)
+                except:
+                    # Skip if convex hull cannot be computed (e.g., collinear points)
+                    pass
+            
+            # Plot the cluster number
+            
+            x, y = embeddings_c[:, :2].mean(axis=0)
+            plt.text(x, y, str(c), fontsize=12, fontweight='bold', 
+                    bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.8))
 
-    # Add convex hulls around clusters
-    for c in clusters_array:
-        embeddings_c = embedding[clusters == c]
-        
-        # Only draw convex hull if we have at least 3 points
-        if len(embeddings_c) >= 3:
-            try:
-                hull = ConvexHull(embeddings_c)
-                # Get the vertices of the convex hull
-                hull_points = embeddings_c[hull.vertices]
-                
-                # Create a polygon patch
-                polygon = patches.Polygon(hull_points, linewidth=2, edgecolor='black', 
-                                        facecolor='none', alpha=0.7, linestyle='--')
-                ax.add_patch(polygon)
-            except:
-                # Skip if convex hull cannot be computed (e.g., collinear points)
-                pass
-        
-        # Plot the cluster number
-        x, y = embeddings_c.mean(axis=0)
-        plt.text(x, y, str(c), fontsize=12, fontweight='bold', 
-                bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.8))
+        plt.xlabel('UMAP x')
+        plt.ylabel('UMAP y')
+        g.legend(loc='center left', bbox_to_anchor=(1.25, 0.5), ncol=1)
+        if save_plot:
+            plt.savefig('clusters.png', bbox_inches='tight', dpi=300)
+        plt.show()
 
-    plt.xlabel('UMAP x')
-    plt.ylabel('UMAP y')
-    g.legend(loc='center left', bbox_to_anchor=(1.25, 0.5), ncol=1)
-    plt.savefig('clusters.png', bbox_inches='tight', dpi=300)
-    plt.show()
-
-    original_features['clusters'] = clusters.max() + 1
-    # our sounds our to short to cut them by duration 
-    # original_features.loc[original_features.duration > 0.3, 'clusters'] = clusters
     original_features['clusters'] = clusters
+    # our sounds our to short to cut them by duration 
+    # original_features.loc[original_features.duration > 0.3, 'clusters'].shape = clusters
+    # original_features['clusters'] = clusters
 
-    pd.DataFrame(original_features).to_pickle(ds.dataset_folder.joinpath('features_with_clusters.pkl'))
+    if save_pkl:
+        pd.DataFrame(original_features).to_pickle(ds.dataset_folder.joinpath('features_with_clusters.pkl'))
 
     total_selection_table = pd.DataFrame()
 
@@ -256,7 +280,6 @@ def generate_clusters(ds):
         total_selection_table = pd.concat([total_selection_table, detected_foregrounds])
 
     total_selection_table.loc[original_features.index, 'clusters'] = original_features.clusters
-
     return total_selection_table
 
 

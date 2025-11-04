@@ -1,45 +1,226 @@
 import json
 import os
-
+import tqdm
 from ultralytics import YOLO
-
 import dataset
 import cluster
+from sklearn.metrics import adjusted_rand_score
+import numpy as np
+import pandas as pd
 
 if __name__ == '__main__':
+    
+    # Option 1: Mean pairwise ARI (most common approach)
+    def overall_consistency(df):
+        n_runs = len(df.columns)
+        ari_scores = []
+        
+        for i in tqdm.tqdm(range(n_runs)):
+            for j in range(i+1, n_runs):
+                ari_scores.append(adjusted_rand_score(df.iloc[:, i], df.iloc[:, j]))
+        
+        return np.mean(ari_scores)
+
     # config_path = input('Where is the config json file of the dataset?: ')
-    config_path = 'config_clap_problem.json'
+    config_path = 'config_high_2024_test_100.json'
 
     f = open(config_path)
     config = json.load(f)
 
     ds = dataset.LifeWatchDataset(config)
+    
     predictions_folder = ds.dataset_folder.joinpath('predictions')
     labels_path = predictions_folder.joinpath('labels')
     if not predictions_folder.joinpath('labels').exists():
         #model_path = input('Where is the model to predict?')
         #high freqnecy
-        model_path = r"F:\Linnea\Copy of All data\STHH1\AMAR_1076\test_linnea2\dataset\training set high frequency\runs\detect\bpns\train_manual_Felipe\model_hf\weights\best.pt"
+        # model_path = r"F:\Linnea\Copy of All data\STHH1\AMAR_1076\test_linnea2\dataset\training set high frequency\runs\detect\bpns\train_manual_Felipe\model_hf\weights\best.pt"
         # model_path = r"F:\Linnea\Copy of All data\STHH1\AMAR_1076\test_linnea2\dataset\training set low frequency\runs\detect\bpns\train_manual_Felipe\train7\weights\best.pt"
+        model_path = r"F:\Linnea\2024_high\dataset\runs\detect\train35\weights\best.pt"
+        # model_path = r"F:\Linnea\2024_low\dataset\runs\detect\train2\weights\best.pt"
 
         model = YOLO(model_path)
         os.mkdir(predictions_folder)
         os.mkdir(labels_path)
         ds.create_spectrograms(overwrite=True, model=model, save_image=False,
-                               labels_path=labels_path, conf=0.6)
+                               labels_path=labels_path, conf=0.1, img_size=3200)
 
     ds.convert_detections_to_raven(predictions_folder=predictions_folder)
-    # the clusterization fails beacause the generated serialized pickle is empty. 
-    total_selection_table = cluster.generate_clusters(ds)
-    total_selection_table.to_csv(ds.dataset_folder.joinpath('total_selection_table.csv'))
-    total_selection_table.to_csv(ds.dataset_folder.joinpath('total_selection_table.txt'), sep='\t')
-    
+    # the clusterization fails beacause the generated serialized pickle is empty.
+    # 
+    labels_to_exclude = ['boat_sound', 'boat_noise', 'water_movement', 'boat_operations',
+                         'electronic_noise', 'interference', 'voice', 'out_of_water', 'deployment']
+    # put the recently generated annotations file  in the ds object
+    # ds.annotations_file = r"F:\Linnea\2024_high\dataset\test\predictions\test high3200conf0.1.txt"
+    # ds.annotations_file = r"F:\Linnea\2024_high\dataset\test_100\predictions\roi_detections_clean.txt"
+    ds.annotations_file =r"F:\\Linnea\\2024_high\\dataset\\test_100\\animal_files\\predictions\roi_detections_clean.txt"
+    # encode the features
+    features = ds.encode_clap_with_images(labels_to_exclude=labels_to_exclude, max_duration=3) 
+    # save the features adn try the clustering with the rapdid ecosystem
+    features.to_csv(ds.dataset_folder.joinpath('features_test100_animal_files_soound_image_freq.csv'), index=True)
+    features_animals = features.copy()
+    features2 = pd.read_csv(r"F:\Linnea\2024_high\dataset\test_100\animal_files\features_test100_conf0.1_all_embedding.csv", index_col=0)
+    # cluster_list = []
+    # for i in tqdm.tqdm(range(10)):
+    total_selection_table = cluster.generate_clusters( ds, features=features2,
+                                                        save_plot=False,  save_pkl=True,
+                                                        plot_clusters=True,
+                                                        plot_embedding=True,
+                                                        u_map_ncomp=2,#int(results_final.iloc[imax]['u_map_nneigh']), 
+                                                        u_map_nneigh=50,#int(results_final.iloc[imax]['u_map_ncomp']),
+                                                        u_map_min_dist=0.011598941367523208,#float(results_final.iloc[imax]['u_map_min_dist']), 
+                                                        cluster_min_cluster_size=5, 
+                                                        cluster_epsilon=0.2)#float(results_final.iloc[imax]['cluster_epsilon']))
+    # cluster_list.append(total_selection_table['clusters'])
 
+    total_selection_table.to_csv(ds.dataset_folder.joinpath('clusters_test100_conf0.1_all_embeddingwith_animals.txt'), index=True,
+                                 sep='\t')
+    
+    # unique wavs in the selection table
+    # files with animal 
+    # animal_files = [
+    # "AMAR1183.20240407T214720Z.wav",
+    # "AMAR1183.20240415T194722Z.wav",
+    # "AMAR1183.20240415T200722Z.wav",
+    # "AMAR1183.20240415T202722Z.wav",
+    # "AMAR1183.20240415T204722Z.wav",
+    # "AMAR1183.20240422T074724Z.wav",
+    # "AMAR1183.20240425T124725Z.wav",
+    # "AMAR1183.20240510T020729Z.wav",
+    # "AMAR1183.20240510T022729Z.wav",
+    # "AMAR1183.20240510T024729Z.wav",
+    # "AMAR1184.20240331T232512Z.wav",
+    # "AMAR1184.20240401T000512Z.wav",
+    # "AMAR1184.20240418T194515Z.wav",
+    # "AMAR1184.20240418T232515Z.wav",
+    # "AMAR1184.20240419T000515Z.wav",
+    # "AMAR1184.20240426T202517Z.wav",
+    # "AMAR1184.20240426T204517Z.wav",
+    # "AMAR1184.20240426T210517Z.wav",
+    # "AMAR1184.20240430T022518Z.wav",
+    # ]
+    # [os.path.basename(f) for f in total_selection_table['wav'].unique()]
+    # consistency = overall_consistency(pd.DataFrame(cluster_list).T)
+    # print(f"Overall consistency: {consistency:.3f}")
+
+    # show the number of clusters per run
+    # num_clusters = [len(set(clusters)) - (1 if -1 in clusters else 0) for clusters in cluster_list]
 
 
     ds.plot_clusters_polar_day(total_selection_table)
     ds.plot_clusters_polar_day(total_selection_table, selected_clusters=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
 
+
+    # # change of environment
+    # # load features 
+    
+    # import pandas as pd
+    # import numpy as np
+    # features =  pd.read_csv('F:Linnea/2024_high/dataset/clustering_test/features.csv')
+    # from clustering_gpu import generate_clusters_gpu
+    # import itertools
+    # import tqdm
+    # from sklearn.metrics import silhouette_score, davies_bouldin_score, calinski_harabasz_score
+    # from joblib import Parallel, delayed
+    # import random
+
+
+    # param_grid = {'u_map_ncomp': np.linspace(2,10,10, dtype=int),
+    #               'u_map_nneigh': np.linspace(20, 300, 20, dtype=int),
+    #               'u_map_min_dist': np.linspace(0.1, 0.9, 10),
+    #               'cluster_epsilon': np.linspace(0.1,0.9,10, dtype=float)}
+    # grid = [dict(zip(param_grid.keys(), v))
+    #         for v in itertools.product(*param_grid.values())]
+    # print(len(grid), "combinations")
+
+    # def evaluate_config(x, ds, features):
+    #     total_selection_table = cluster.generate_clusters(
+    #         ds, features=features, save_plot=False, save_pkl=False,
+    #         plot_clusters=False, plot_embedding=False,
+    #         u_map_ncomp=int(x['u_map_ncomp']),
+    #         u_map_nneigh=int(x['u_map_nneigh']),
+    #         u_map_min_dist=float(x['u_map_min_dist']),
+    #         cluster_min_cluster_size=5,
+    #         cluster_epsilon=float(x['cluster_epsilon'])
+    #     )
+
+    #     if len(total_selection_table.value_counts('clusters')) < 2:
+    #         return None
+
+    #     sc_sill = silhouette_score(features, total_selection_table.clusters)
+    #     db = davies_bouldin_score(features, total_selection_table.clusters)
+    #     ch = calinski_harabasz_score(features, total_selection_table.clusters)
+    #     return sc_sill, db, ch
+
+    # all_clusters={'sillhouette':[], 'davies_bouldin':[], 'calinski_harabasz':[]}
+    # sample = random.sample(grid, 100)
+    # sample = np.random.choice(len(grid), size=100, replace=False)
+    # sample = np.random.choice(len(grid), size=100, replace=False)
+    # for x in tqdm.tqdm([grid[i] for i in sample]):
+    #     total_selection_table = cluster.generate_clusters(ds, features=features, 
+    #                                                     save_plot=False, save_pkl=False,
+    #                                                     plot_clusters=False,
+    #                                                     plot_embedding=False,
+    #                                                     u_map_ncomp=int(x['u_map_ncomp']), 
+    #                                                     u_map_nneigh=int(x['u_map_nneigh']),
+    #                                                     u_map_min_dist=float(x['u_map_min_dist']), 
+    #                                                     cluster_min_cluster_size=5, 
+    #                                                     cluster_epsilon=float(x['cluster_epsilon']))
+    #     if len(total_selection_table.value_counts('clusters')) < 2:
+    #         continue
+    #     sc_sill = silhouette_score(features, total_selection_table.clusters)
+    #     db = davies_bouldin_score(features, total_selection_table.clusters)
+    #     ch = calinski_harabasz_score(features, total_selection_table.clusters)
+    #     all_clusters['sillhouette'].append(sc_sill)
+    #     all_clusters['davies_bouldin'].append(db)
+    #     all_clusters['calinski_harabasz'].append(ch)
+
+    # results = Parallel(n_jobs=-1)(
+    #         delayed(evaluate_config)(x, ds, features) for x in tqdm.tqdm(sample)
+    #     )
+    # results_tb = pd.DataFrame(results)
+    # results_tb.columns = ['sillhouette', 'davies_bouldin', 'calinski_harabasz']
+    # results_2 = pd.DataFrame(sample)
+    # results_final = pd.concat([results_2, results_tb], axis=1)
+    # # select the best parameters
+    # best_params_S = results_final.sort_values(by=['sillhouette'], ascending=False).iloc[0]
+    # best_params_d = results_final.sort_values(by=['davies_bouldin'], ascending=True).iloc[0]
+    # best_params_c = results_final.sort_values(by=['calinski_harabasz'], ascending=False).iloc[0]
+   
+    # import matplotlib.pyplot as plt
+    # from sklearn.linear_model import LinearRegression
+    # from sklearn.preprocessing import SplineTransformer
+    # from sklearn.pipeline import make_pipeline
+    # import seaborn as sns
+    # from sklearn.inspection import PartialDependenceDisplay
+    # # ...existing code...
+    # # Prepare data for regression
+    # X = results_final[['u_map_ncomp', 'u_map_nneigh', 'u_map_min_dist', 'cluster_epsilon']].astype(float)
+    # y = results_final['sillhouette']
+
+    # # Example: build spline + linear regression pipeline
+    # model = make_pipeline(
+    #     SplineTransformer(n_knots=6, degree=3),  # cubic splines for flexibility
+    #     LinearRegression()
+    # )
+
+    # model.fit(X, y)
+
+    # # Partial dependence plots
+    # features = range(X.shape[1])  # indices of features
+    # disp = PartialDependenceDisplay.from_estimator(
+    #     model, X, features,
+    #     feature_names=X.columns,
+    #     kind="both", subsample=50,
+    #     grid_resolution=50
+    # )
+    # plt.show()
+    # # plt.savefig('partial_dependence_silhouette.png')
+    # # plt.close()
+    # # # Print regression coefficients
+    # imax = np.argmax(model.predict(X))
+    # print("Best parameters:", results_final.iloc[imax])
+    
 # import pandas as pd
 
 # ds = pd.read_table(r"F:\linnea\copy_all_data\STHH6\AMAR_1075\20230403T064016Z\predictions\roi_detections_clean.txt")

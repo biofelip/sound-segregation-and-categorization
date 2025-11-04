@@ -1,0 +1,21 @@
+{
+    "duration" : 20, 
+    "overlap" : 0.5,
+    "desired_fs" : 64000,
+    "channel" : 0,
+    "color": false, 
+    "log": false,
+    
+    "nfft" : 1024,
+    "win_len" : 1024,
+    "hop_ratio" : 8,
+
+    "cut": false,
+    "cutoutpoint": 3000,
+    
+    "normalization_style": "noisy",
+    "wavs_folder" : "F:\\Linnea\\Copy of All data\\STHH1\\AMAR_1076\\test_linnea2\\clap_problem\\wavs",
+    "dataset_folder" : "F:\\Linnea\\Copy of All data\\STHH1\\AMAR_1076\\test_linnea2\\clap_problem",
+    
+    "annotations_file": "F:\\Linnea\\Copy of All data\\STHH1\\AMAR_1076\\test_linnea2\\clap_problem\\predictions\\roi_detections_clean.txt" 
+}

@@ -100,7 +100,7 @@ class LifeWatchDataset:
         with open(config_path, 'w') as f:
             json.dump(self.config, f)
 
-    def create_spectrograms(self, overwrite=False, save_image=True, model=None, conf=0.1, labels_path=None):
+    def create_spectrograms(self, overwrite=False, save_image=True, model=None, conf=0.1, img_size = 640, labels_path=None):
         # First, create all the images
         if self.split_folders:
             folders_list = []
@@ -158,7 +158,7 @@ class LifeWatchDataset:
                                                 name='predictions',
                                                 save=False, show=False, save_conf=True, save_txt=False, conf=conf,
                                                 save_crop=True, agnostic_nms=False, stream=False, verbose=False,
-                                                imgsz=1088, exist_ok=True,  iou= 0.45, visualize=False)
+                                                imgsz=img_size, exist_ok=True,  iou= 0.45, visualize=False)
                                 for r in results:
                                     label_name = img_name.replace('.png', '.txt')
                                     if self.split_folders:
@@ -684,13 +684,13 @@ class LifeWatchDataset:
 
         return
 
-    def encode_clap(self, labels_to_exclude=None, max_duration=3):
+    def encode_clap(self, labels_to_exclude=None, max_duration=1):
         output_name = 'CLAP_features_space_filtered_%s' % max_duration
         features_path = self.dataset_folder.joinpath(output_name + '.pkl')
         if not features_path.exists():
             device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
             model = ClapModel.from_pretrained("davidrrobinson/BioLingual").to(device)
-            processor = ClapProcessor.from_pretrained("davidrrobinson/BioLingual", sampling_rate=48000) # before self.desired_fs
+            processor = ClapProcessor.from_pretrained("davidrrobinson/BioLingual", sampling_rate=64000, truncation=True) # before self.desired_fs
 
             total_df = pd.DataFrame()
             folder_n = 0
@@ -723,19 +723,43 @@ class LifeWatchDataset:
                         batch_size=16,
                         shuffle=False)
                     features_list, idxs = [], []
-                    for x, i in tqdm(dataloader):
-                        x_resampled = []
-                        for audio_tensor in x:
-                            audio_tensor = audio_tensor.squeeze()
-                            audio_resampled = F.resample(audio_tensor, orig_freq=64000, new_freq=48000)
-                            x_resampled.append(audio_resampled.cpu().numpy().astype(np.float32))
-                        # x = [s.cpu().numpy() for s in x]
-                        # inputs = processor(audios=x, return_tensors="pt", sampling_rate=self.desired_fs).to(
-                        #     device)
-                        inputs = processor(audios=x_resampled, return_tensors="pt", sampling_rate=48000).to(device)
+                    for  batch, i in tqdm(dataloader):
+                        # batch → (16, 640000) torch.Tensor
+                        # convertir a lista de arrays1D
+                        waveforms = [w.cpu().numpy().squeeze() for w in batch]
+
+                        inputs = processor(
+                            audios=waveforms,
+                            sampling_rate=64000,
+                            return_tensors="pt",
+                            truncation="rand_trunc",
+                            #padding="max_length",
+                            # max_length_s = 5,
+                            max_length=256)                        
+                        inputs['input_features'].shape
+                        inputs = {k: v.to(model.device) for k, v in inputs.items()}
+
                         audio_embed = model.get_audio_features(**inputs)
                         features_list.extend(audio_embed.cpu().detach().numpy())
                         idxs.extend(i.cpu().detach().numpy())
+                        # len(idxs)
+
+                    # 
+                    # for x, i in tqdm(dataloader):
+                    #     # x_resampled = []
+                    #     # for audio_tensor in x:
+                    #     #     audio_tensor = audio_tensor.squeeze()
+                    #     #     audio_resampled = F.resample(audio_tensor, orig_freq=64000, new_freq=48000)
+                    #     #     #audio_resampled = audio_tensor
+                    #     #     x_resampled.append(audio_resampled.cpu().numpy().astype(np.float32))
+                    #     x = [s.cpu().numpy() for s in x]
+                    #     inputs = processor(audios=x, return_tensors="pt", sampling_rate=self.desired_fs, truncation=True,
+                    #                        max_length=640000, padding="max_length").to(
+                    #         device)
+                    #     # inputs = processor(audios=x_resampled, return_tensors="pt", sampling_rate=64000).to(device)
+                    #     audio_embed = model.get_audio_features(**inputs)
+                    #     features_list.extend(audio_embed.cpu().detach().numpy())
+                    #     idxs.extend(i.cpu().detach().numpy())
 
                     features_space = torch.Tensor(np.stack(features_list).astype(float))
                     torch.save(features_space, features_path)
@@ -743,7 +767,7 @@ class LifeWatchDataset:
 
                     features_df.index = idxs
 
-                    columns = ['min_freq', 'max_freq', 'height', 'width', 'SNR NIST Quick (dB)', 'Tags']
+                    columns = ['min_freq', 'max_freq', 'height', 'width', 'SNR NIST Quick (dB)']
                     if 'SNR NIST Quick (dB)' not in selection_table.columns:
                         columns = ['min_freq', 'max_freq', 'height', 'width', 'Tags']
                     df = pd.merge(features_df, selection_table[columns], left_index=True, right_index=True)
