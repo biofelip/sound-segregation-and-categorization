@@ -22,7 +22,7 @@ if __name__ == '__main__':
         return np.mean(ari_scores)
 
     # config_path = input('Where is the config json file of the dataset?: ')
-    config_path = 'config_high_2024_test_100.json'
+    config_path = 'config_low_2024_test_100.json'
 
     f = open(config_path)
     config = json.load(f)
@@ -34,16 +34,14 @@ if __name__ == '__main__':
     if not predictions_folder.joinpath('labels').exists():
         #model_path = input('Where is the model to predict?')
         #high freqnecy
-        # model_path = r"F:\Linnea\Copy of All data\STHH1\AMAR_1076\test_linnea2\dataset\training set high frequency\runs\detect\bpns\train_manual_Felipe\model_hf\weights\best.pt"
-        # model_path = r"F:\Linnea\Copy of All data\STHH1\AMAR_1076\test_linnea2\dataset\training set low frequency\runs\detect\bpns\train_manual_Felipe\train7\weights\best.pt"
-        model_path = r"F:\Linnea\2024_high\dataset\runs\detect\train35\weights\best.pt"
-        # model_path = r"F:\Linnea\2024_low\dataset\runs\detect\train2\weights\best.pt"
+        # model_path = r"F:\Linnea\2024_high\dataset\runs\detect\train35\weights\best.pt" # best model high freq
+        model_path = r"F:\Linnea\2024_low\dataset\runs\detect\train3\weights\best.pt" # best model low freq
 
         model = YOLO(model_path)
         os.mkdir(predictions_folder)
         os.mkdir(labels_path)
         ds.create_spectrograms(overwrite=True, model=model, save_image=False,
-                               labels_path=labels_path, conf=0.1, img_size=3200)
+                               labels_path=labels_path, conf=0.1, img_size=1243)
 
     ds.convert_detections_to_raven(predictions_folder=predictions_folder)
     # the clusterization fails beacause the generated serialized pickle is empty.
@@ -53,28 +51,82 @@ if __name__ == '__main__':
     # put the recently generated annotations file  in the ds object
     # ds.annotations_file = r"F:\Linnea\2024_high\dataset\test\predictions\test high3200conf0.1.txt"
     # ds.annotations_file = r"F:\Linnea\2024_high\dataset\test_100\predictions\roi_detections_clean.txt"
-    ds.annotations_file =r"F:\\Linnea\\2024_high\\dataset\\test_100\\animal_files\\predictions\roi_detections_clean.txt"
+    #ds.annotations_file =r"F:\\Linnea\\2024_high\\dataset\\test_100\\animal_files\\predictions\roi_detections_clean.txt"
+    ds.annotations_file =r"F:\Linnea\2024_high\dataset\test_100\animal_files\low_freq\predictions\roi_detections_clean.txt" 
     # encode the features
     features = ds.encode_clap_with_images(labels_to_exclude=labels_to_exclude, max_duration=3) 
     # save the features adn try the clustering with the rapdid ecosystem
-    features.to_csv(ds.dataset_folder.joinpath('features_test100_animal_files_soound_image_freq.csv'), index=True)
-    features_animals = features.copy()
-    features2 = pd.read_csv(r"F:\Linnea\2024_high\dataset\test_100\animal_files\features_test100_conf0.1_all_embedding.csv", index_col=0)
-    # cluster_list = []
+    features.to_csv(ds.dataset_folder.joinpath('features_test100_animal_files_soound_image_Lowfreq.csv'), index=True)
+    # features_animals = features.copy()
+    features = pd.read_csv(ds.dataset_folder.joinpath('features_test100_animal_files_soound_image_Lowfreq.csv'), index_col=0)
+    # # cluster_list = []
     # for i in tqdm.tqdm(range(10)):
-    total_selection_table = cluster.generate_clusters( ds, features=features2,
-                                                        save_plot=False,  save_pkl=True,
+    total_selection_table = cluster.generate_clusters( ds, features=features,
+                                                        save_plot=True,  save_pkl=True,
                                                         plot_clusters=True,
                                                         plot_embedding=True,
-                                                        u_map_ncomp=2,#int(results_final.iloc[imax]['u_map_nneigh']), 
-                                                        u_map_nneigh=50,#int(results_final.iloc[imax]['u_map_ncomp']),
-                                                        u_map_min_dist=0.011598941367523208,#float(results_final.iloc[imax]['u_map_min_dist']), 
+                                                        u_map_ncomp=4,#int(results_final.iloc[imax]['u_map_nneigh']), 
+                                                        u_map_nneigh=15,#int(results_final.iloc[imax]['u_map_ncomp']),
+                                                        u_map_min_dist=0.05,#float(results_final.iloc[imax]['u_map_min_dist']), 
                                                         cluster_min_cluster_size=5, 
-                                                        cluster_epsilon=0.2)#float(results_final.iloc[imax]['cluster_epsilon']))
+                                                        cluster_epsilon=0.01)#float(results_final.iloc[imax]['cluster_epsilon']))
     # cluster_list.append(total_selection_table['clusters'])
 
-    total_selection_table.to_csv(ds.dataset_folder.joinpath('clusters_test100_conf0.1_all_embeddingwith_animals.txt'), index=True,
+    total_selection_table.to_csv(ds.dataset_folder.joinpath('clusters_test100_conf0.1_all_embeddingwith_animals_LF.txt'), index=True,
                                  sep='\t')
+    
+
+    # clustering per file with animals and also some file without animals
+    files_to_cluster = {
+    "minke1":"AMAR1183.20240407T214720Z.wav",
+    "minke2":"AMAR1183.20240415T194722Z.wav",
+    "minke3":"AMAR1183.20240415T200722Z.wav",
+    "minke4":"AMAR1183.20240422T074724Z.wav",
+    "minke5 ":"AMAR1183.20240425T124725Z.wav",
+    "dolphin1":"AMAR1183.20240510T020729Z.wav",
+    "dolphin2":"AMAR1183.20240510T022729Z.wav",
+    "dolphin3":"AMAR1183.20240510T024729Z.wav",
+    "minke6":"AMAR1184.20240331T232512Z.wav",
+    "minke7":"AMAR1184.20240401T000512Z.wav",
+    "minke8":"AMAR1184.20240418T194515Z.wav",
+    "minke9":"AMAR1184.20240418T232515Z.wav",
+    "minke10":"AMAR1184.20240419T000515Z.wav",
+    "minke11":"AMAR1184.20240426T210517Z.wav",
+    "minke12":"AMAR1184.20240430T022518Z.wav",
+    "random1":'AMAR1184.20240309T104507Z.wav',
+    "random2":'AMAR1184.20240221T032503Z.wav',    
+    "random3":'AMAR1184.20240408T052513Z.wav',
+    "random4":'AMAR1184.20240425T032517Z.wav',    
+    "random5":'AMAR1184.20240503T034518Z.wav',        
+    "random6":'AMAR1184.20240426T202517Z.wav',
+    "random7":'AMAR1183.20240614T012739Z.wav',
+    "random8":'AMAR1184.20240220T164503Z.wav',
+    "random9":'AMAR1183.20240228T180404Z.wav',
+    }
+    
+    for key, file in files_to_cluster.items():
+        print(f"Clustering file: {file} ({key})")
+        # selec the rows in features that correspond to specific file in total selection table
+        features_file = features.loc[cluster_file['Begin File'] == file]
+        print(f"Number of detections in file: {len(features_file)}")
+        total_selection_table = cluster.generate_clusters( ds, features=features_file,
+            save_plot=False,  save_pkl=False,
+            plot_clusters=False,
+            plot_embedding=False,
+            u_map_ncomp=4,#int(results_final.iloc[imax]['u_map_nneigh']), 
+            u_map_nneigh=50,#int(results_final.iloc[imax]['u_map_ncomp']),
+            u_map_min_dist=0.01,#float(results_final.iloc[imax]['u_map_min_dist']), 
+            cluster_min_cluster_size=5, 
+            cluster_epsilon=0.01)#float(results_final.iloc[imax]['cluster_epsilon']))
+        total_selection_table.to_csv(ds.dataset_folder.joinpath(f'clusters_{file}_{key}.txt'), index=True,
+                                 sep='\t')
+# extract 10 random files fromm the selection table
+    # import random
+    # all_files = total_selection_table['Begin File'].unique().tolist()
+    # random_files = random.sample(all_files, 10)
+    # # only keep the random file if is not an animal file
+    # random_files = [f for f in random_files if f not in animal_files.values()]
+
     
     # unique wavs in the selection table
     # files with animal 

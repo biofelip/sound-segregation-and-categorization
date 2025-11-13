@@ -15,8 +15,9 @@
     
     "normalization_style": "noisy",
     
-    "wavs_folder" : "F:\\Linnea\\Copy of All data\\STHH1\\AMAR_1076\\test_linnea2\\DATASET_AL\\wavs",
-    "dataset_folder" : "F:\\Linnea\\Copy of All data\\STHH1\\AMAR_1076\\test_linnea2\\DATASET_AL",
+    "wavs_folder" : "F:\\Linnea\\2024_high\\dataset\\active learning\\DATASET_AL\\wavs",
+    "wav_list" : "F:\\Linnea\\2024_high\\dataset\\active learning\\active_learning_pool_overview.csv", 
+    "dataset_folder" : "F:\\Linnea\\2024_high\\dataset\\active learning\\DATASET_AL",
     
     "annotations_file": ""
 }

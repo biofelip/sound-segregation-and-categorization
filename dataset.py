@@ -104,6 +104,34 @@ class LifeWatchDataset:
 
     def create_spectrograms(self, overwrite=False, save_image=True, model=None, conf=0.1, img_size = 640, labels_path=None):
         # First, create all the images
+        """
+        Create spectrograms from a folder of wavs.
+
+        Parameters
+        ----------
+        overwrite : bool, optional
+            Whether to overwrite existing spectrograms. Defaults to False.
+        save_image : bool, optional
+            Whether to save the spectrograms as images. Defaults to True.
+        model : ClapModel, optional
+            A ClapModel to use for predictions on the spectrograms. Defaults to None.
+        conf : float, optional
+            The confidence threshold to use for predictions. Defaults to 0.1.
+        img_size : int, optional
+            The size of the images to save. Defaults to 640.
+        labels_path : pathlib.Path, optional
+            The path to the folder where the labels will be saved. Defaults to None.
+
+        Returns
+        -------
+        None
+
+        Notes
+        -----
+        This method will create spectrograms for all the wavs in the given folder.
+        If the split_folders parameter is True in the config, then the spectrograms will be saved in a subfolder with the same name as the folder.
+        If a model is given, then the method will use it to make predictions on the spectrograms.
+        """
         if self.split_folders:
             folders_list = []
             for f in self.wavs_folder.glob('*'):
@@ -182,6 +210,20 @@ class LifeWatchDataset:
                     i += self.overlap
 
     def create_chunk_spectrogram_noisy(self, chunk ):
+    # Generate a spectrogram image from a given chunk of audio
+    # Parameters
+    # ----------
+    # chunk : torch.Tensor
+    #     A tensor containing the audio chunk to generate the spectrogram from
+
+    # Returns
+    # -------
+    # img : np.ndarray
+    #     A 3D numpy array containing the spectrogram image
+    # f : np.ndarray
+    #     A 1D numpy array containing the frequencies of the spectrogram
+    # 
+
         f, t, sxx = scipy.signal.spectrogram(chunk, fs=self.desired_fs, window=('hamming'),
                                              nperseg=self.win_len,
                                              noverlap=self.win_overlap, nfft=self.nfft,
@@ -207,6 +249,12 @@ class LifeWatchDataset:
         return img, f
 
     def create_chunk_spectrogram_low_freq(self, chunk):
+    # """
+    # This function creates a spectrogram from a given chunk of audio data. The spectrogram is filtered with a band-pass filter between 5 Hz and 124 Hz to remove high and low frequency components. The resulting spectrogram is then converted to a dB scale and normalized to the range [0, 1] using the 98th percentile as the upper limit. The spectrogram is then converted to an image with 8-bit color depth.
+
+    # :param chunk: the audio data to be processed
+    # :return: a tuple containing the resulting spectrogram image and the corresponding frequencies
+    # """
         sos = scipy.signal.iirfilter(20, [5, 124], rp=None, rs=None, btype='band',
                                      analog=False, ftype='butter', output='sos',
                                      fs=self.desired_fs)
@@ -228,19 +276,28 @@ class LifeWatchDataset:
         return img, f
 
     def convert_raven_annotations_to_yolo(self, labels_to_exclude=None, values_to_replace=0):
-        """
+        # """
 
-        :param annotations_file:
-        :param labels_to_exclude: list
-        :param values_to_replace: should be a dict with the name of the Tag as a key and an int as the value, for the
-        yolo classes
-        :return:
-        """
+        # :param annotations_file:
+        # :param labels_to_exclude: list
+        # :param values_to_replace: should be a dict with the name of the Tag as a key and an int as the value, for the
+        # yolo classes
+        # :return:
+        # """
         for _, selections in self.load_relevant_selection_table(labels_to_exclude=labels_to_exclude):
             if self.cutspectrogram:
                 cutout = self.cutoutpoint
+                # if the high frequency is above the cutout, clip it but only if the lower frequency is below 1500 Hz if not erase the annotation
+                mask = selections['High Freq (Hz)'] > cutout
+                selections.loc[mask, 'High Freq (Hz)'] = cutout-10
+                # selections['Low Freq (Hz)'] = selections['Low Freq (Hz)'].clip(lower=10)
+                # selections['High Freq (Hz)'] = selections['High Freq (Hz)'].clip(upper=cutout-10)
             else:
                 cutout = self.desired_fs /2
+            
+            # Exclude annotations that have a low frequency above 1200 Hz
+            mask = (selections['Low Freq (Hz)'] > 1200) & (selections['High Freq (Hz)'] == cutout-10)
+            selections.drop(selections[mask].index, inplace=True)
 
             #selections['height'] = (selections['High Freq (Hz)'] - selections['Low Freq (Hz)']) / (self.desired_fs / 2)
             selections['height'] = (selections['High Freq (Hz)'] - selections['Low Freq (Hz)']) / cutout 

@@ -7,16 +7,67 @@ import cv2
 import soundfile as sf
 
 # Paths
-root = r"E:\\HABITATWal\\AMAR\\above_3_khz\\wavs_test"
-cluster_file_root = r"F:\Linnea\2024_high\dataset\test"
+root = r"F:\Linnea\test_set100"
+cluster_file_root = r"F:\Linnea\2024_high\dataset\test_100\animal_files\low_freq"
 #read the txt file with the cluster info
-cluster_csv = os.path.join(cluster_file_root, "clusters_test high3200conf0.1.txt")
-sampling_rate = 1024
+cluster_csv = os.path.join(cluster_file_root, "clusters_test100_conf0.1_all_embeddingwith_animals_LF.txt")
+sampling_rate = 8192
 # Load cluster info
 cluster_file = pd.read_csv(cluster_csv, index_col=False, delimiter='\t')
 # Unique clusters
 clusters = cluster_file['clusters'].unique()
 print(cluster_file.columns)
+
+# # for multiple cluster files (one per file)
+# cluster_csvs = []
+# for file in os.listdir(cluster_file_root):
+#     cluster_csvs.append(os.path.join(cluster_file_root, file))
+# # read all cluster files into a list of dataframes
+# cluster_files = []
+# for csv in cluster_csvs:
+#     df = pd.read_csv(csv, index_col=False, delimiter='\t')
+#     cluster_files.append(df)   
+# Check if the files in which cluster the files with animals ended up
+animal_files = {
+    "minke1":"AMAR1183.20240407T214720Z.wav",
+    "minke2":"AMAR1183.20240415T194722Z.wav",
+    "minke3":"AMAR1183.20240415T200722Z.wav",
+    "minke4":"AMAR1183.20240422T074724Z.wav",
+    "minke5 ":"AMAR1183.20240425T124725Z.wav",
+    "dolphin1":"AMAR1183.20240510T020729Z.wav",
+    "dolphin2":"AMAR1183.20240510T022729Z.wav",
+    "dolphin3":"AMAR1183.20240510T024729Z.wav",
+    "minke6":"AMAR1184.20240331T232512Z.wav",
+    "minke7":"AMAR1184.20240401T000512Z.wav",
+    "minke8":"AMAR1184.20240418T194515Z.wav",
+    "minke9":"AMAR1184.20240418T232515Z.wav",
+    "minke10":"AMAR1184.20240419T000515Z.wav",
+    "minke11":"AMAR1184.20240426T210517Z.wav",
+    "minke12":"AMAR1184.20240430T022518Z.wav"
+}
+
+# tha animals were mainly grouiped in the cluster 12 is this because the cluster 12 just has more points in it
+for key, file in animal_files.items():
+    # filter the df for said file
+    df_file = cluster_file[cluster_file['Begin File']==file]
+    # count unique values in clusters column
+    unique_clusters = df_file['clusters'].value_counts()
+    print(f"File {file}({key}): {unique_clusters}")
+# yes :(
+cluster_file['clusters'].value_counts()
+
+# for multiple cluster files (one per file)
+for cluster_file, i in enumerate(cluster_files):
+    for key, file in animal_files.items():
+        # filter the df for said file
+        df_file = cluster_file[cluster_file['Begin File']==file]
+        if df_file.empty:
+            continue
+        # count unique values in clusters column
+        unique_clusters = df_file['clusters'].value_counts()
+        print(f"File {file}({key}): {unique_clusters}")
+    # yes :(
+    cluster_file['clusters'].value_counts().to_csv(os.path.join(cluster_file_root, f"cluster_counts_{key}{i}.csv"))
 
 # Loop through clusters
 for cl in clusters:
@@ -27,8 +78,8 @@ for cl in clusters:
     os.makedirs(out_dir, exist_ok=True)
     
     # Subsample if >100 examples
-    if len(cluster) > 100:
-        cluster = cluster.sample(100, random_state=42)
+    if len(cluster) > 20:
+        cluster = cluster.sample(20, random_state=42)
     # save cluster table
     cluster.to_csv(os.path.join(out_dir, f"cluster_{cl}.txt"), index=False, sep='\t')
     
@@ -71,6 +122,15 @@ for cl in clusters:
         out_file = os.path.join(out_dir, f"{round(row['confidence'],4)}_{base_name}_{idx}.png")
         # save sound snippet
         out_file_s = os.path.join(out_dir, f"{round(row['confidence'],4)}_{base_name}_{idx}.wav")
+        # if medoid_flag is trues save the snippet in a separate folder
+        medoid_dir = os.path.join(cluster_file_root, "spectrograms", f"medoids")
+        os.makedirs(medoid_dir, exist_ok=True)
+        if row['medoid_flag']:
+            out_filem = os.path.join(medoid_dir, f"{round(row['confidence'],4)}_{row['clusters']}.png")
+            out_file_ms = os.path.join(medoid_dir,  f"{round(row['confidence'],4)}_{row['clusters']}.wav")
+            sf.write(out_file_ms, y_seg, sr)
+            cv2.imwrite(out_filem, S_resized)
         sf.write(out_file_s, y_seg, sr)
         cv2.imwrite(out_file, S_resized)
         print(f"Saved {out_file}")
+

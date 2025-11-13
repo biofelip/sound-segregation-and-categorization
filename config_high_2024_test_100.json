@@ -14,7 +14,7 @@
     "cutoutpoint": 3000,
     
     "normalization_style": "noisy",
-    "wavs_folder" : "C:\\Users\\247404\\Documents\\2024\\Linnea\\Soundscape\\above_3_khz\\wavs_test_100\\animal_files",
+    "wavs_folder" : "F:\\Linnea\\test_set100",
     "dataset_folder" : "F:\\Linnea\\2024_high\\dataset\\test_100\\animal_files",
     
     "annotations_file": ""

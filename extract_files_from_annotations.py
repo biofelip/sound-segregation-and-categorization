@@ -21,7 +21,7 @@ def main():
     root_folder  = args.root_folder
 
     annotation_file = r"E:\HABITATWal\AMAR\Test_data_100.txt"
-    destination_folder = r"F:\Linnea\test_set100"
+    destination_folder = r"F:\Linnea\2024_high\dataset\active learning\DATASET_AL\wavs"
     root_folder  = r"E:\HABITATWal\AMAR"
     #read the annotation file
     df = pd.read_table(os.path.join(root_folder, annotation_file))

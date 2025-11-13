@@ -195,6 +195,20 @@ def generate_clusters(ds, u_map_ncomp, u_map_nneigh, u_map_min_dist,
     #                                 algorithm='boruvka_kdtree')
     clusterer = hdbscan_model.fit(embedding)
     clusters = clusterer.labels_
+    unique_clusters = np.unique(clusters[clusters != -1])
+    medioid_idx = []
+    for uc in unique_clusters:
+        mask = clusters == uc
+        Xc = embedding[mask]
+
+        # Pairwisee euclidean distances
+        dist_matrix = metrics.pairwise.euclidean_distances(Xc, Xc)
+        meandist = dist_matrix.mean(axis=1)
+        idx_medoid_local = np.argmin(meandist)
+        idx_medoid_global  = np.where(mask)[0][idx_medoid_local]
+        medioid_idx.append(idx_medoid_global)
+    
+
 
     # # Plot the clusters withou convex hull (original)
     # noise_mask = clusters == -1
@@ -280,6 +294,9 @@ def generate_clusters(ds, u_map_ncomp, u_map_nneigh, u_map_min_dist,
         total_selection_table = pd.concat([total_selection_table, detected_foregrounds])
 
     total_selection_table.loc[original_features.index, 'clusters'] = original_features.clusters
+    total_selection_table['medoid_flag'] = False
+    total_selection_table.loc[total_selection_table.index[medioid_idx], 'medoid_flag'] = True
+    # total_selection_table.loc[medioid_idx, 'medoid_flag'] = True
     return total_selection_table
 
 
