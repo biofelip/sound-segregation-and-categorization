@@ -102,7 +102,8 @@ class LifeWatchDataset:
         with open(config_path, 'w') as f:
             json.dump(self.config, f)
 
-    def create_spectrograms(self, overwrite=False, save_image=True, model=None, conf=0.1, img_size = 640, labels_path=None):
+    def create_spectrograms(self, overwrite=False, save_image=True, model=None, 
+                            conf=0.1, img_size = 640, labels_path=None, return_results=False):
         # First, create all the images
         """
         Create spectrograms from a folder of wavs.
@@ -145,14 +146,23 @@ class LifeWatchDataset:
                             os.mkdir(labels_path.joinpath(f.name))
         else:
             folders_list = [self.wavs_folder]
-
+        if return_results:
+            all_results = {}
         for folder_n, folder_path in tqdm(enumerate(folders_list), total=len(folders_list)):
             print('Spectrograms from folder %s/%s: %s' % (folder_n, len(folders_list), folder_path))
-            for wav_path in tqdm(list(folder_path.glob('*.wav')), total=len(list(folder_path.glob('*.wav')))):
+            # check extension of the sound files
+            if len(list(folder_path.glob('*.wav'))) > 0:
+                extension = '*.wav'
+            elif len(list(folder_path.glob('*.flac'))) > 0:
+                extension = '*.flac'
+            else:
+                print('No wav or flac files found in folder %s' % folder_path)
+                continue
+            for wav_path in tqdm(list(folder_path.glob(extension)), total=len(list(folder_path.glob(extension)))):
                 waveform_info = torchaudio.info(wav_path)
                 i = 0.0
                 while (i * self.duration + self.duration) < (waveform_info.num_frames / waveform_info.sample_rate):
-                    img_name = wav_path.name.replace('.wav', '_%s.png' % i)
+                    img_name = wav_path.name.replace(extension, '_%s.png' % i)
                     if self.split_folders:
                         img_path = self.images_folder.joinpath(folder_path.name, img_name)
                     else:
@@ -187,14 +197,18 @@ class LifeWatchDataset:
                                                 project=str(self.dataset_folder),
                                                 name='predictions',
                                                 save=False, show=False, save_conf=True, save_txt=False, conf=conf,
-                                                save_crop=True, agnostic_nms=False, stream=False, verbose=False,
-                                                imgsz=img_size, exist_ok=True,  iou= 0.45, visualize=False)
-                                for r in results:
-                                    label_name = img_name.replace('.png', '.txt')
-                                    if self.split_folders:
-                                        r.save_txt(labels_path.joinpath(folder_path.name, label_name), save_conf=True)
-                                    else:
-                                        r.save_txt(labels_path.joinpath(label_name), save_conf=True)
+                                                save_crop=False, agnostic_nms=False, stream=False, verbose=False,
+                                                imgsz=img_size, exist_ok=True,  iou= 0.40, visualize=False)
+                                if not return_results:
+                                    for r in results:
+                                        label_name = img_name.replace('.png', '.txt')
+                                        if self.split_folders:
+                                            r.save_txt(labels_path.joinpath(folder_path.name, label_name), save_conf=True)
+                                        else:
+                                            r.save_txt(labels_path.joinpath(label_name), save_conf=True)
+                                else:
+                                    all_results[os.path.basename(wav_path)] = results
+                            
 
                             if save_image:
                                 if self.log:
@@ -208,6 +222,8 @@ class LifeWatchDataset:
                                     Image.fromarray(np.flipud(img)).save(img_path)
                             plt.close()
                     i += self.overlap
+        if return_results:
+            return all_results
 
     def create_chunk_spectrogram_noisy(self, chunk ):
     # Generate a spectrogram image from a given chunk of audio

@@ -41,7 +41,7 @@ if __name__ == '__main__':
         os.mkdir(predictions_folder)
         os.mkdir(labels_path)
         ds.create_spectrograms(overwrite=True, model=model, save_image=False,
-                               labels_path=labels_path, conf=0.1, img_size=1243)
+                               labels_path=labels_path, conf=0.1, img_size=1243, return_results=False)
 
     ds.convert_detections_to_raven(predictions_folder=predictions_folder)
     # the clusterization fails beacause the generated serialized pickle is empty.

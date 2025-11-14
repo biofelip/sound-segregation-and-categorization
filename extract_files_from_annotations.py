@@ -39,11 +39,15 @@ def main():
     train_set =[f for f in wav_files if os.path.basename(f) in file_names]
     sum([os.path.getsize(f) for f in train_set])/1e9
 
+    import soundfile as sf
+
     # copy the files to the destination folder  
     for file_name in train_set:
         print(file_name)
         print(os.path.join(root_folder,destination_folder))
-        shutil.copy(file_name,  os.path.join(root_folder,destination_folder)) 
+        data, sample_rate = sf.read(file_name)
+        sf.write(os.path.join(root_folder,destination_folder, os.path.basename(file_name).replace('.wav', '.flac')), data, sample_rate) 
+        # shutil.copy(file_name,  os.path.join(root_folder,destination_folder)) 
 
 if __name__ == "__main__":
     main()
