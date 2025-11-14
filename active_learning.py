@@ -66,9 +66,11 @@ if not already_annotated:
     # Predictions need to be done in the ENTIRE UNLABELED FOLDER
     if overwrite  or (not unlabeled_ds.dataset_folder.joinpath('predictions_%s' % active_learning_step).exists()):
         print('predicting...')
-        results = model(source=unlabeled_ds.images_folder, project=str(unlabeled_ds.dataset_folder),
-                        name='predictions_%s' % active_learning_step, stream=True, save=False,
-                        show=False, save_conf=True, save_txt=True, conf=0.1, save_crop=False, agnostic_nms=True)
+        results = unlabeled_ds.create_spectrograms(overwrite=True, model=model,return_results=True,
+                                                    conf=0.1, img_size=1243, labels_path=None, save_image=False)
+        # results = model(source=unlabeled_ds.images_folder, project=str(unlabeled_ds.dataset_folder),
+        #                 name='predictions_%s' % active_learning_step, stream=True, save=False,
+        #                 show=False, save_conf=True, save_txt=True, conf=0.1, save_crop=False, agnostic_nms=True)
         for r in results:
             pass
 
