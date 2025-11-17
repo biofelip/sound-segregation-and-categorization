@@ -41,7 +41,7 @@ active_learning_step = 0
 already_annotated = False
 # Load a model
 # model_path = input('Where is the model? :')
-model_path = r"F:\Linnea\Copy of All data\STHH1\AMAR_1076\test_linnea2\dataset\training set high frequency\runs\detect\bpns\train_manual_Felipe\model_hf\weights\best.pt"
+model_path = r"F:\Linnea\2024_high\dataset\runs\detect\train35\weights\best.pt"
 
 model = YOLO(model_path)  # pretrained YOLOv8n model
 

@@ -10,7 +10,7 @@ if __name__ == '__main__':
     f = open(config_path)
     config = json.load(f)
     ds = dataset.LifeWatchDataset(config)
-    ds.create_spectrograms(overwrite=False, extension='.flac')
+    ds.create_spectrograms(overwrite=True, extension='.flac')
     if ds.annotations_file != '':
         labels_to_exclude = ['boat_sound', 'boat_noise', 'water_movement', 'boat_operation',
                              'electronic_noise', 'interference', 'voice', 'out_of_water', 'deployment']
