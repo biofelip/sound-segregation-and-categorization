@@ -102,7 +102,8 @@ class LifeWatchDataset:
         with open(config_path, 'w') as f:
             json.dump(self.config, f)
 
-    def create_spectrograms(self, overwrite=False, save_image=True, model=None, conf=0.1, img_size = 640, labels_path=None):
+    def create_spectrograms(self, extension, overwrite=False, save_image=True, model=None, 
+                            conf=0.1, img_size = 640, labels_path=None):
         # First, create all the images
         """
         Create spectrograms from a folder of wavs.
@@ -147,12 +148,16 @@ class LifeWatchDataset:
             folders_list = [self.wavs_folder]
 
         for folder_n, folder_path in tqdm(enumerate(folders_list), total=len(folders_list)):
+
             print('Spectrograms from folder %s/%s: %s' % (folder_n, len(folders_list), folder_path))
-            for wav_path in tqdm(list(folder_path.glob('*.wav')), total=len(list(folder_path.glob('*.wav')))):
+            #check for file extensions of sound files  in the folder either .wav or .flac
+
+        
+            for wav_path in tqdm(list(folder_path.glob('*'+ extension)), total=len(list(folder_path.glob('*'+ extension)))):
                 waveform_info = torchaudio.info(wav_path)
                 i = 0.0
                 while (i * self.duration + self.duration) < (waveform_info.num_frames / waveform_info.sample_rate):
-                    img_name = wav_path.name.replace('.wav', '_%s.png' % i)
+                    img_name = wav_path.name.replace(extension, '_%s.png' % i)
                     if self.split_folders:
                         img_path = self.images_folder.joinpath(folder_path.name, img_name)
                     else:
@@ -275,7 +280,7 @@ class LifeWatchDataset:
         img = np.array(sxx * 255, dtype=np.uint8)
         return img, f
 
-    def convert_raven_annotations_to_yolo(self, labels_to_exclude=None, values_to_replace=0):
+    def convert_raven_annotations_to_yolo(self, extension, labels_to_exclude=None, values_to_replace=0):
         # """
 
         # :param annotations_file:
@@ -361,7 +366,7 @@ class LifeWatchDataset:
                         'x',
                         'y',
                         'width',
-                        'height']].to_csv(self.labels_folder.joinpath(wav_name.replace('.wav', '_%s.txt' % i)),
+                        'height']].to_csv(self.labels_folder.joinpath(wav_name.replace(extension, '_%s.txt' % i)),
                                           header=None, index=None, sep=' ', mode='w')
                     # Add the station if the image adds it as well!
                     i += self.overlap
@@ -403,7 +408,7 @@ class LifeWatchDataset:
 
         return total_selections
 
-    def all_predictions_to_dataframe(self, labels_folder, overwrite=True):
+    def all_predictions_to_dataframe(self, extension, labels_folder, overwrite=True ):
         if self.cutspectrogram:
             cutout = self.cutoutpoint
         else:
@@ -416,7 +421,7 @@ class LifeWatchDataset:
             wav_folder = self.wavs_folder
         for txt_label in tqdm(labels_folder.glob('*.txt'), total=len(list(labels_folder.glob('*.txt')))):
             name_parts = txt_label.name.split('_')
-            wav_name = '_'.join(name_parts[:-1]) + '.wav'
+            wav_name = '_'.join(name_parts[:-1]) + extension
             original_wav = wav_folder.joinpath(wav_name)
             offset_seconds = float(name_parts[-1].split('.txt')[0])
             detections = pd.read_table(txt_label, header=None, sep=' ', names=['class', 'x', 'y',
@@ -486,11 +491,17 @@ class LifeWatchDataset:
                 detected_foregrounds['cummulative_sec'] = np.nan
 
                 cummulative_seconds = 0
+               
                 if self.split_folders:
                     wavs_f_folder = self.wavs_folder.joinpath(f.name)
                 else:
                     wavs_f_folder = self.wavs_folder
-                wavs_to_check = list(wavs_f_folder.glob('*.wav'))
+                 #check for the extension of the files
+                if len(list(wavs_f_folder.glob('*.wav'))) > 0:
+                    extension = '.wav'
+                elif len(list(wavs_f_folder.glob('*.flac'))) > 0:
+                    extension = '.flac' 
+                wavs_to_check = list(wavs_f_folder.glob(extension))
                 if isinstance(wavs_to_check[0], pathlib.PosixPath):
                     wavs_to_check.sort()
                 for wav_file_path in wavs_to_check:
