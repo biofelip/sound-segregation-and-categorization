@@ -68,11 +68,10 @@ if not already_annotated:
         print('predicting...')
         results = unlabeled_ds.create_spectrograms(overwrite=True, model=model,return_results=True,
                                                     conf=0.1, img_size=1243, labels_path=None, save_image=False)
-        # results = model(source=unlabeled_ds.images_folder, project=str(unlabeled_ds.dataset_folder),
-        #                 name='predictions_%s' % active_learning_step, stream=True, save=False,
-        #                 show=False, save_conf=True, save_txt=True, conf=0.1, save_crop=False, agnostic_nms=True)
-        for r in results:
-            pass
+        import pickle
+
+        with open("RESULTS.pkl", "wb") as f:
+            pickle.dump(results, f)
 
     # Get the files already selected on last steps
     wavs_to_exclude = []
@@ -83,6 +82,7 @@ if not already_annotated:
             wavs_to_exclude = np.concatenate([wavs_to_exclude, list(old_selection_folder.glob('*.wav'))])
 
     print('converting training annotations to df...')
+    training_foregrounds.columns
     training_foregrounds = training_ds.convert_raven_annotations_to_df(labels_to_exclude=labels_to_exclude,
                                                                        values_to_replace=0)
 
