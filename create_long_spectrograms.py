@@ -6,11 +6,11 @@ importlib.reload(dataset)
 
 if __name__ == '__main__':
     # config_path = input('Where is the config json file of the dataset?: ')
-    config_path=r'config_low_2024.json'
+    config_path=r'config_al.json'
     f = open(config_path)
     config = json.load(f)
     ds = dataset.LifeWatchDataset(config)
-    ds.create_spectrograms(overwrite=True)
+    ds.create_spectrograms_fast(overwrite=True, img_size=1248)
     if ds.annotations_file != '':
         labels_to_exclude = ['boat_sound', 'boat_noise', 'water_movement', 'boat_operation',
                              'electronic_noise', 'interference', 'voice', 'out_of_water', 'deployment']

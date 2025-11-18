@@ -13,6 +13,8 @@ import os
 import soundfile as sf
 
 import dataset
+import importlib
+importlib.reload(dataset)
 
 random.seed(42)
 
@@ -67,7 +69,9 @@ if not already_annotated:
     if overwrite  or (not unlabeled_ds.dataset_folder.joinpath('predictions_%s' % active_learning_step).exists()):
         print('predicting...')
         results = unlabeled_ds.create_spectrograms(overwrite=True, model=model,return_results=True,
-                                                    conf=0.1, img_size=1243, labels_path=None, save_image=False)
+                                                    conf=0.1, img_size=1248, labels_path=None, save_image=False)
+        results2 = unlabeled_ds.create_spectrograms_fast(overwrite=True, model=model,return_results=True,
+                                                    conf=0.1, img_size=1248, labels_path=None, save_image=False)
         import pickle
 
         with open("RESULTS.pkl", "wb") as f:
@@ -82,9 +86,10 @@ if not already_annotated:
             wavs_to_exclude = np.concatenate([wavs_to_exclude, list(old_selection_folder.glob('*.wav'))])
 
     print('converting training annotations to df...')
-    training_foregrounds.columns
     training_foregrounds = training_ds.convert_raven_annotations_to_df(labels_to_exclude=labels_to_exclude,
                                                                        values_to_replace=0)
+    training_foregrounds.columns
+    
 
     unlabeled_predictions_folder = unlabeled_ds.dataset_folder.joinpath('predictions_%s' % active_learning_step)
     if not unlabeled_predictions_folder.joinpath('labels_df.csv').exists():

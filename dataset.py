@@ -102,114 +102,210 @@ class LifeWatchDataset:
         with open(config_path, 'w') as f:
             json.dump(self.config, f)
 
-    def create_spectrograms(self, overwrite=False, save_image=True, model=None, 
-                            conf=0.1, img_size = 640, labels_path=None, return_results=False):
-        # First, create all the images
+    def create_spectrograms_fast(self, overwrite=False, save_image=True, model=None, 
+                        conf=0.1, img_size=640, labels_path=None, return_results=False,
+                        batch_size=16, agnostic_nms=False):
         """
-        Create spectrograms from a folder of wavs.
+        Create spectrograms from audio chunks, optionally running YOLO in batches.
+        """
+        if self.split_folders:
+            folders_list = [f for f in self.wavs_folder.glob('*') if f.is_dir()]
+            for f in folders_list:
+                if save_image and not self.images_folder.joinpath(f.name).exists():
+                    os.mkdir(self.images_folder.joinpath(f.name))
+                if model and not labels_path.joinpath(f.name).exists():
+                    os.mkdir(labels_path.joinpath(f.name))
+        else:
+            folders_list = [self.wavs_folder]
 
+        if return_results:
+            all_results = {}
+
+        for folder_n, folder_path in tqdm(enumerate(folders_list), total=len(folders_list)):
+            print(f"Spectrograms from folder {folder_n}/{len(folders_list)}: {folder_path}")
+
+            wav_files = list(folder_path.glob('*.wav')) + list(folder_path.glob('*.flac'))
+            if len(wav_files) == 0:
+                print(f"No WAV or FLAC files found in {folder_path}")
+                continue
+
+            for wav_path in tqdm(wav_files, total=len(wav_files)):
+                waveform, fs = torchaudio.load(wav_path)
+                waveform = waveform[0, :]  # mono
+                # Resample if needed
+                if fs != self.desired_fs:
+                    waveform = torchaudio.functional.resample(waveform, fs, self.desired_fs)
+                    fs = self.desired_fs
+
+                num_chunks = int(np.ceil(len(waveform) / self.blocksize))
+                chunk_images = []
+                chunk_names = []
+
+                for i in range(num_chunks):
+                    start = i * self.blocksize
+                    end = start + self.blocksize
+                    chunk = waveform[start:end]
+                    if len(chunk) < self.blocksize:
+                        pad = self.blocksize - len(chunk)
+                        chunk = torch.nn.functional.pad(chunk, (0, pad))
+
+                    # Spectrogram on GPU if possible
+                    if self.normalization_style == 'noisy':
+                        img, _ = self.create_chunk_spectrogram_noisy(chunk)
+                    elif self.normalization_style == 'low_freq':
+                        img, _ = self.create_chunk_spectrogram_low_freq(chunk)
+
+                    chunk_images.append(np.ascontiguousarray(np.flipud(img)[:, :, ::-1]))
+                    img_name = f"{wav_path.stem}_{i}.png"
+                    chunk_names.append(img_name)
+
+                # Run YOLO in batches
+                if model:
+                    for batch_start in range(0, len(chunk_images), batch_size):
+                        batch_imgs = chunk_images[batch_start:batch_start+batch_size]
+                        batch_names = chunk_names[batch_start:batch_start+batch_size]
+
+                        results = model(source=batch_imgs, project=str(self.dataset_folder),
+                                        name='predictions', save=False, show=False, save_conf=True,
+                                        save_txt=False, conf=conf, save_crop=False, agnostic_nms=agnostic_nms,
+                                        stream=True, verbose=False, imgsz=img_size, exist_ok=True, iou=0.4)
+
+                        for img_name, r in zip(batch_names, results):
+                            if not return_results:
+                                label_name = img_name.replace('.png', '.txt')
+                                if self.split_folders:
+                                    r.save_txt(labels_path.joinpath(folder_path.name, label_name), save_conf=True)
+                                else:
+                                    r.save_txt(labels_path.joinpath(label_name), save_conf=True)
+                            else:
+                                all_results[img_name] = r
+
+                # Optionally save images (skip by default for speed)
+                if save_image:
+                    for img, img_name in zip(chunk_images, chunk_names):
+                        if self.split_folders:
+                            img_path = self.images_folder.joinpath(folder_path.name, img_name)
+                        else:
+                            img_path = self.images_folder.joinpath(img_name)
+                        img_pil = Image.fromarray(np.flipud(img))
+                        w_percent = (img_size / float(img_pil.size[0]))
+                        new_height = int((float(img_pil.size[1]) * float(w_percent)))
+                        img_pil = img_pil.resize((img_size, new_height), Image.LANCZOS)
+                        img_pil.save(img_path)
+
+        if return_results:
+            return all_results
+
+    
+    def create_spectrograms(self, overwrite=False, save_image=True, model=None, 
+                        conf=0.1, img_size=640, labels_path=None, return_results=False):
+        """
+        Create spectrograms from a folder of wavs or flacs, optionally run YOLO predictions.
+        
         Parameters
         ----------
         overwrite : bool, optional
-            Whether to overwrite existing spectrograms. Defaults to False.
+            Overwrite existing spectrogram images.
         save_image : bool, optional
-            Whether to save the spectrograms as images. Defaults to True.
-        model : ClapModel, optional
-            A ClapModel to use for predictions on the spectrograms. Defaults to None.
+            Save the spectrogram images.
+        model : YOLO model, optional
+            YOLO model for predictions.
         conf : float, optional
-            The confidence threshold to use for predictions. Defaults to 0.1.
+            Confidence threshold.
         img_size : int, optional
-            The size of the images to save. Defaults to 640.
+            Image size for YOLO predictions.
         labels_path : pathlib.Path, optional
-            The path to the folder where the labels will be saved. Defaults to None.
-
+            Path to save labels.
+        return_results : bool, optional
+            Return a dict of YOLO results if True.
+        
         Returns
         -------
-        None
-
-        Notes
-        -----
-        This method will create spectrograms for all the wavs in the given folder.
-        If the split_folders parameter is True in the config, then the spectrograms will be saved in a subfolder with the same name as the folder.
-        If a model is given, then the method will use it to make predictions on the spectrograms.
+        all_results : dict, optional
+            Dictionary of YOLO results per chunk if return_results is True.
         """
+        
+        # Determine folders
         if self.split_folders:
-            folders_list = []
-            for f in self.wavs_folder.glob('*'):
-                if f.is_dir():
-                    folders_list.append(f)
-                    if save_image:
-                        if not self.images_folder.joinpath(f.name).exists():
-                            os.mkdir(self.images_folder.joinpath(f.name))
-                    if model is not None:
-                        if not labels_path.joinpath(f.name).exists():
-                            os.mkdir(labels_path.joinpath(f.name))
+            folders_list = [f for f in self.wavs_folder.glob('*') if f.is_dir()]
+            for f in folders_list:
+                if save_image and not self.images_folder.joinpath(f.name).exists():
+                    os.mkdir(self.images_folder.joinpath(f.name))
+                if model is not None and not labels_path.joinpath(f.name).exists():
+                    os.mkdir(labels_path.joinpath(f.name))
         else:
             folders_list = [self.wavs_folder]
+        
         if return_results:
             all_results = {}
+
+        # Iterate folders
         for folder_n, folder_path in tqdm(enumerate(folders_list), total=len(folders_list)):
-            print('Spectrograms from folder %s/%s: %s' % (folder_n, len(folders_list), folder_path))
-            # check extension of the sound files
+            print(f'Spectrograms from folder {folder_n}/{len(folders_list)}: {folder_path}')
+
+            # Check extension
             if len(list(folder_path.glob('*.wav'))) > 0:
                 extension = '*.wav'
             elif len(list(folder_path.glob('*.flac'))) > 0:
                 extension = '*.flac'
             else:
-                print('No wav or flac files found in folder %s' % folder_path)
+                print(f'No wav or flac files found in folder {folder_path}')
                 continue
+
+            # Iterate files
             for wav_path in tqdm(list(folder_path.glob(extension)), total=len(list(folder_path.glob(extension)))):
                 waveform_info = torchaudio.info(wav_path)
                 i = 0.0
                 while (i * self.duration + self.duration) < (waveform_info.num_frames / waveform_info.sample_rate):
-                    img_name = wav_path.name.replace(extension, '_%s.png' % i)
-                    if self.split_folders:
-                        img_path = self.images_folder.joinpath(folder_path.name, img_name)
-                    else:
-                        img_path = self.images_folder.joinpath(img_name)
+                    img_name = f'{wav_path.stem}_{i:.3f}.png'
+                    img_path = self.images_folder.joinpath(folder_path.name if self.split_folders else '', img_name)
 
                     if overwrite or (not img_path.exists()):
                         start_chunk = int(i * self.blocksize)
                         start_chunk_s = start_chunk / self.desired_fs
+
+                        # Load chunk and resample if needed
                         if waveform_info.sample_rate > self.desired_fs:
                             start_chunk_old_fs = int(start_chunk_s * waveform_info.sample_rate)
                             blocksize_old_fs = int(self.duration * waveform_info.sample_rate)
-                            chunk_old_fs, fs = torchaudio.load(wav_path,
-                                                               normalize=True,
-                                                               frame_offset=start_chunk_old_fs,
-                                                               num_frames=blocksize_old_fs)
-                            chunk = F.resample(waveform=chunk_old_fs[0, :], orig_freq=fs, new_freq=self.desired_fs)
+                            chunk_old_fs, fs = torchaudio.load(wav_path, normalize=True,
+                                                            frame_offset=start_chunk_old_fs,
+                                                            num_frames=blocksize_old_fs)
+                            chunk = F.resample(chunk_old_fs[0, :], orig_freq=fs, new_freq=self.desired_fs)
                         else:
-                            chunk, fs = torchaudio.load(wav_path, normalize=True, frame_offset=start_chunk,
+                            chunk, fs = torchaudio.load(wav_path, normalize=True,
+                                                        frame_offset=start_chunk,
                                                         num_frames=self.blocksize)
                             chunk = chunk[0, :]
 
                         if len(chunk) == self.blocksize:
+                            # Generate spectrogram
                             if self.normalization_style == 'noisy':
                                 img, f = self.create_chunk_spectrogram_noisy(chunk)
                             elif self.normalization_style == 'low_freq':
                                 img, f = self.create_chunk_spectrogram_low_freq(chunk)
-                            # else:
-                            #     img, f = self.create_chunk_spectrogram_low_freq(chunk)
 
+                            # YOLO prediction (stream)
                             if model is not None:
-                                results = model(source=np.ascontiguousarray(np.flipud(img)[:, :, ::-1]),
-                                                project=str(self.dataset_folder),
-                                                name='predictions',
-                                                save=False, show=False, save_conf=True, save_txt=False, conf=conf,
-                                                save_crop=False, agnostic_nms=False, stream=False, verbose=False,
-                                                imgsz=img_size, exist_ok=True,  iou= 0.40, visualize=False)
-                                if not return_results:
-                                    for r in results:
+                                for r in model(
+                                    source=np.ascontiguousarray(np.flipud(img)[:, :, ::-1]),
+                                    project=str(self.dataset_folder),
+                                    name='predictions',
+                                    save=False, show=False, save_conf=True, save_txt=False,
+                                    conf=conf, save_crop=False, agnostic_nms=False,
+                                    stream=True, verbose=False, imgsz=img_size, exist_ok=True,
+                                    iou=0.40, visualize=False
+                                ):
+                                    if not return_results:
                                         label_name = img_name.replace('.png', '.txt')
                                         if self.split_folders:
                                             r.save_txt(labels_path.joinpath(folder_path.name, label_name), save_conf=True)
                                         else:
                                             r.save_txt(labels_path.joinpath(label_name), save_conf=True)
-                                else:
-                                    all_results[os.path.basename(wav_path)] = results
-                            
+                                    else:
+                                        all_results[os.path.basename(img_name)] = r
 
+                            # Save image
                             if save_image:
                                 if self.log:
                                     fig, ax = plt.subplots()
@@ -218,12 +314,140 @@ class LifeWatchDataset:
                                     plt.axis('off')
                                     plt.ylim(bottom=3)
                                     plt.savefig(img_path, bbox_inches='tight', pad_inches=0)
+                                    plt.close()
                                 else:
                                     Image.fromarray(np.flipud(img)).save(img_path)
-                            plt.close()
+
                     i += self.overlap
+
         if return_results:
             return all_results
+
+    # old version
+    # def create_spectrograms(self, overwrite=False, save_image=True, model=None, 
+    #                         conf=0.1, img_size = 640, labels_path=None, return_results=False):
+    #     # First, create all the images
+    #     """
+    #     Create spectrograms from a folder of wavs.
+
+    #     Parameters
+    #     ----------
+    #     overwrite : bool, optional
+    #         Whether to overwrite existing spectrograms. Defaults to False.
+    #     save_image : bool, optional
+    #         Whether to save the spectrograms as images. Defaults to True.
+    #     model : ClapModel, optional
+    #         A ClapModel to use for predictions on the spectrograms. Defaults to None.
+    #     conf : float, optional
+    #         The confidence threshold to use for predictions. Defaults to 0.1.
+    #     img_size : int, optional
+    #         The size of the images to save. Defaults to 640.
+    #     labels_path : pathlib.Path, optional
+    #         The path to the folder where the labels will be saved. Defaults to None.
+
+    #     Returns
+    #     -------
+    #     None
+
+    #     Notes
+    #     -----
+    #     This method will create spectrograms for all the wavs in the given folder.
+    #     If the split_folders parameter is True in the config, then the spectrograms will be saved in a subfolder with the same name as the folder.
+    #     If a model is given, then the method will use it to make predictions on the spectrograms.
+    #     """
+    #     if self.split_folders:
+    #         folders_list = []
+    #         for f in self.wavs_folder.glob('*'):
+    #             if f.is_dir():
+    #                 folders_list.append(f)
+    #                 if save_image:
+    #                     if not self.images_folder.joinpath(f.name).exists():
+    #                         os.mkdir(self.images_folder.joinpath(f.name))
+    #                 if model is not None:
+    #                     if not labels_path.joinpath(f.name).exists():
+    #                         os.mkdir(labels_path.joinpath(f.name))
+    #     else:
+    #         folders_list = [self.wavs_folder]
+    #     if return_results:
+    #         all_results = {}
+    #     for folder_n, folder_path in tqdm(enumerate(folders_list), total=len(folders_list)):
+    #         print('Spectrograms from folder %s/%s: %s' % (folder_n, len(folders_list), folder_path))
+    #         # check extension of the sound files
+    #         if len(list(folder_path.glob('*.wav'))) > 0:
+    #             extension = '*.wav'
+    #         elif len(list(folder_path.glob('*.flac'))) > 0:
+    #             extension = '*.flac'
+    #         else:
+    #             print('No wav or flac files found in folder %s' % folder_path)
+    #             continue
+    #         file_list = list(folder_path.glob(extension))
+    #         for wav_path in tqdm(file_list, total=len(file_list)):
+    #             waveform_info = torchaudio.info(wav_path)
+    #             i = 0.0
+    #             while (i * self.duration + self.duration) < (waveform_info.num_frames / waveform_info.sample_rate):
+    #                 img_name = f'{wav_path.stem}_{i:.3f}.png'
+    #                 #  img_name = wav_path.name.replace(extension, '_%s.png' % i)
+    #                 if self.split_folders:
+    #                     img_path = self.images_folder.joinpath(folder_path.name, img_name)
+    #                 else:
+    #                     img_path = self.images_folder.joinpath(img_name)
+
+    #                 if overwrite or (not img_path.exists()):
+    #                     start_chunk = int(i * self.blocksize)
+    #                     start_chunk_s = start_chunk / self.desired_fs
+    #                     if waveform_info.sample_rate > self.desired_fs:
+    #                         start_chunk_old_fs = int(start_chunk_s * waveform_info.sample_rate)
+    #                         blocksize_old_fs = int(self.duration * waveform_info.sample_rate)
+    #                         chunk_old_fs, fs = torchaudio.load(wav_path,
+    #                                                            normalize=True,
+    #                                                            frame_offset=start_chunk_old_fs,
+    #                                                            num_frames=blocksize_old_fs)
+    #                         chunk = F.resample(waveform=chunk_old_fs[0, :], orig_freq=fs, new_freq=self.desired_fs)
+    #                     else:
+    #                         chunk, fs = torchaudio.load(wav_path, normalize=True, frame_offset=start_chunk,
+    #                                                     num_frames=self.blocksize)
+    #                         chunk = chunk[0, :]
+
+    #                     if len(chunk) == self.blocksize:
+    #                         if self.normalization_style == 'noisy':
+    #                             img, f = self.create_chunk_spectrogram_noisy(chunk)
+    #                         elif self.normalization_style == 'low_freq':
+    #                             img, f = self.create_chunk_spectrogram_low_freq(chunk)
+    #                         # else:
+    #                         #     img, f = self.create_chunk_spectrogram_low_freq(chunk)
+
+    #                         if model is not None:
+    #                             results = model(source=np.ascontiguousarray(np.flipud(img)[:, :, ::-1]),
+    #                                             project=str(self.dataset_folder),
+    #                                             name='predictions',
+    #                                             save=False, show=False, save_conf=True, save_txt=False, conf=conf,
+    #                                             save_crop=False, agnostic_nms=False, stream=False, verbose=False,
+    #                                             imgsz=img_size, exist_ok=True,  iou= 0.40, visualize=False)
+    #                             if not return_results:
+    #                                 for r in results:
+    #                                     label_name = img_name.replace('.png', '.txt')
+    #                                     if self.split_folders:
+    #                                         r.save_txt(labels_path.joinpath(folder_path.name, label_name), save_conf=True)
+    #                                     else:
+    #                                         r.save_txt(labels_path.joinpath(label_name), save_conf=True)
+    #                             else:
+    #                                 all_results[os.path.basename(img_name)] = results
+                            
+
+    #                         if save_image:
+    #                             if self.log:
+    #                                 fig, ax = plt.subplots()
+    #                                 ax.pcolormesh(img[:, :, ::-1])
+    #                                 ax.set_yscale('symlog')
+    #                                 plt.axis('off')
+    #                                 plt.ylim(bottom=3)
+    #                                 plt.savefig(img_path, bbox_inches='tight', pad_inches=0)
+    #                             else:
+    #                                 Image.fromarray(np.flipud(img)).save(img_path)
+    #                         plt.close()
+    #                 i += self.overlap
+    #     if return_results:
+    #         return all_results
 
     def create_chunk_spectrogram_noisy(self, chunk ):
     # Generate a spectrogram image from a given chunk of audio
