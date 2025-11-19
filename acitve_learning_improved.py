@@ -76,10 +76,7 @@ if not already_annotated:
     # Get the files already selected on last steps
     wavs_to_exclude = []
     if active_learning_step > 0:
-        for old_step in np.arange(active_learning_step):
-            old_selection_folder = unlabeled_ds.dataset_folder.joinpath(
-                'active_learning/%s/wav_resampled' % old_step)
-            wavs_to_exclude = np.concatenate([wavs_to_exclude, list(old_selection_folder.glob('*.wav'))])
+        pass
 
 
 ## Get the df from the training setprint('converting training annotations to df...')

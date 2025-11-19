@@ -13,8 +13,8 @@ import os
 import soundfile as sf
 
 import dataset
-import importlib
-importlib.reload(dataset)
+# import importlib
+# importlib.reload(dataset)
 
 random.seed(42)
 
@@ -68,14 +68,19 @@ if not already_annotated:
     # Predictions need to be done in the ENTIRE UNLABELED FOLDER
     if overwrite  or (not unlabeled_ds.dataset_folder.joinpath('predictions_%s' % active_learning_step).exists()):
         print('predicting...')
-        results = unlabeled_ds.create_spectrograms(overwrite=True, model=model,return_results=True,
-                                                    conf=0.1, img_size=1248, labels_path=None, save_image=False)
         results2 = unlabeled_ds.create_spectrograms_fast(overwrite=True, model=model,return_results=True,
-                                                    conf=0.1, img_size=1248, labels_path=None, save_image=False)
+                                                    conf=0.1, img_size=3200, labels_path=None, save_image=False)
+        predictions_path=unlabeled_ds.dataset_folder.joinpath('predictions_%s' % active_learning_step)
+        predictions_path.mkdir(parents=True, exist_ok=True)
+        for img, result  in results2:
+            result.save_txt(predictions_path.joinpath(os.path.basename(img).replace('.png', '.txt')))
+
+
+            
         import pickle
 
-        with open("RESULTS.pkl", "wb") as f:
-            pickle.dump(results, f)
+        with open("RESULTS_batch1.pkl", "wb") as f:
+            pickle.dump(results2, f)
 
     # Get the files already selected on last steps
     wavs_to_exclude = []
