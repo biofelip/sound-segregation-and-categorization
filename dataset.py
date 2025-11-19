@@ -210,7 +210,12 @@ class LifeWatchDataset:
                                     plt.ylim(bottom=3)
                                     plt.savefig(img_path, bbox_inches='tight', pad_inches=0)
                                 else:
-                                    Image.fromarray(np.flipud(img)).save(img_path)
+                                    # resize to desired size keeping aspect ratio
+                                    img = Image.fromarray(np.flipud(img))
+                                    width_ratio = img_size / img.size[0]
+                                    new_height = int(img.size[1] * width_ratio)
+                                    img = img.resize((img_size, new_height), Image.LANCZOS)
+                                    img.save(img_path)
                             plt.close()
                     i += self.overlap
 
@@ -408,7 +413,7 @@ class LifeWatchDataset:
 
         return total_selections
 
-    def all_predictions_to_dataframe(self, extension, labels_folder, overwrite=True ):
+    def all_predictions_to_dataframe(self, labels_folder, overwrite=True ):
         if self.cutspectrogram:
             cutout = self.cutoutpoint
         else:
@@ -419,6 +424,11 @@ class LifeWatchDataset:
             wav_folder = self.wavs_folder.joinpath(labels_folder.name)
         else:
             wav_folder = self.wavs_folder
+        if len(list(wav_folder.glob('*.wav'))) > 0:
+            extension = '.wav'
+        elif len(list(wav_folder.glob('*.flac'))) > 0:
+            extension = '.flac'
+        
         for txt_label in tqdm(labels_folder.glob('*.txt'), total=len(list(labels_folder.glob('*.txt')))):
             name_parts = txt_label.name.split('_')
             wav_name = '_'.join(name_parts[:-1]) + extension
@@ -501,7 +511,7 @@ class LifeWatchDataset:
                     extension = '.wav'
                 elif len(list(wavs_f_folder.glob('*.flac'))) > 0:
                     extension = '.flac' 
-                wavs_to_check = list(wavs_f_folder.glob(extension))
+                wavs_to_check = list(wavs_f_folder.glob("*"+extension))
                 if isinstance(wavs_to_check[0], pathlib.PosixPath):
                     wavs_to_check.sort()
                 for wav_file_path in wavs_to_check:

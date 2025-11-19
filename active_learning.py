@@ -13,7 +13,8 @@ import os
 import soundfile as sf
 
 import dataset
-
+# import importlib
+# importlib.reload(dataset)
 random.seed(42)
 
 
@@ -68,7 +69,8 @@ if not already_annotated:
         print('predicting...')
         results = model(source=unlabeled_ds.images_folder, project=str(unlabeled_ds.dataset_folder),
                         name='predictions_%s' % active_learning_step, stream=True, save=False,
-                        show=False, save_conf=True, save_txt=True, conf=0.1, save_crop=False, agnostic_nms=True)
+                        show=False, save_conf=True, save_txt=True, conf=0.1, save_crop=False, agnostic_nms=True, 
+                        imgsz=1248)
         for r in results:
             pass
 
@@ -87,7 +89,7 @@ if not already_annotated:
     unlabeled_predictions_folder = unlabeled_ds.dataset_folder.joinpath('predictions_%s' % active_learning_step)
     if not unlabeled_predictions_folder.joinpath('labels_df.csv').exists():
         print('converting detections to df...')
-        detected_foregrounds, _ = unlabeled_ds.convert_detections_to_raven(unlabeled_predictions_folder)
+        detected_foregrounds, _ = unlabeled_ds.convert_detections_to_raven( unlabeled_predictions_folder)
         detected_foregrounds.to_csv(unlabeled_predictions_folder.joinpath('labels_df.csv'), index=False)
     else:
         detected_foregrounds = pd.read_csv(unlabeled_predictions_folder.joinpath('labels_df.csv'))
@@ -149,18 +151,18 @@ if not already_annotated:
     print('copying the wavs and the spectrograms to the dataset folder...')
     for wav_path, _ in selected_wavs.iterrows():
         wav_name = pathlib.Path(wav_path).name
-        shutil.move(wav_path, str(active_learning_folder.joinpath('wav_resampled', wav_name)))
+        shutil.move(wav_path, str(active_learning_folder.joinpath('wav_resampled')))
         wav_name_without_suffix = wav_name.split('.')[0]
 
         wav_sxx = all_spectrograms.loc[all_spectrograms.str.contains(wav_name_without_suffix)]
         for sxx_path in wav_sxx:
             sxx_name = pathlib.Path(sxx_path).name
-            shutil.move(sxx_path, active_learning_folder.joinpath('images', sxx_name))
+            shutil.move(sxx_path, active_learning_folder.joinpath('images'))
             label_name = sxx_name.replace('.png', '.txt')
             label_path = sxx_path.replace('images', 'predictions_%s\labels' % active_learning_step)
             label_path = label_path.replace('.png', '.txt')
             if os.path.exists(label_path):
-                shutil.move(label_path, active_learning_folder.joinpath('labels', label_name))
+                shutil.move(label_path, active_learning_folder.joinpath('labels'))
             else:
                 pass
 
